@@ -1,23 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald&family=Rum+Raisin&family=Ubuntu&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=League+Gothic&family=Oswald&family=Rum+Raisin&family=Ubuntu&display=swap");
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  overflow-x: hidden !important;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+@font-face {
+  font-family: "LeagueGothic";
+  src: url("../public/fonts/LeagueGothic-Regular-VariableFont_wdth.ttf");
 }
+@font-face {
+  font-family: "RumRaisin";
+  src: url("../public/fonts/RumRaisin-Regular.ttf");
+}
+
 * {
   scrollbar-width: 5px;
-  scrollbar-color: #ffa559 white;
+  scrollbar-color: #398ab9 white;
 }
 *::-webkit-scrollbar {
   width: 5px;
@@ -29,7 +29,7 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #ffa559;
+  background-color: #398ab9;
 }
 @layer components {
   .font-BeasNeue {

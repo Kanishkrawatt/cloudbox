@@ -17,6 +17,7 @@ function Index() {
         height: "100vh",
         width: "100vw",
         display: "flex",
+        overflowX: "hidden",
         flexDirection: "row",
       }}
     >
