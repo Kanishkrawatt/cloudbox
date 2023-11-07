@@ -20,12 +20,15 @@ function Image() {
   const { theme } = useTheme();
   const [images, setImages] = useState<imageType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  // get the url of the page
-  const url = new URL(window.location.href);
-  const g = url.searchParams.get("g");
-  const id = url.searchParams.get("id");
-
-  const getImageData = useCallback(async (id: string,g:string) => {
+  const router = useRouter();
+  let g: string | null = null;
+  let id: string | null = null;
+  if (typeof window !== "undefined") {
+    const url = new URL(window.location.href);
+    g = url.searchParams.get("g");
+    id = url.searchParams.get("id");
+  }
+  const getImageData = useCallback(async (id: string, g: string) => {
     const data = await fetch(`/api/smartgroup/images?id=${id}&g=${g}`);
     data.json().then((data) => {
       setImages([
@@ -39,8 +42,8 @@ function Image() {
   }, []);
   useEffect(() => {
     if (!id) return;
-    getImageData(id as string,g as string);
-  }, [getImageData, id,g]);
+    getImageData(id as string, g as string);
+  }, [getImageData, id, g]);
 
   return (
     <div
