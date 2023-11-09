@@ -1,0 +1,13 @@
+name: Delete Expired Data
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' 
+
+jobs:
+  hit-url:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Hit URL
+      run: curl -sS https://cloudbox.kanishkrawatt.tech/api/deleteExpiredData
