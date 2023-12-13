@@ -61,7 +61,7 @@ const RecentImages = ({
                 }}
                 key={item}
               >
-                <div className="w-full h-60 p-2">
+                <div className="w-full h-[30vh] p-2">
                   <div className="h-1/6 animate-pulse w-full  z-10 flex justify-between capitalize items-center">
                     <div className="bg-gray-300 h-5 w-1/2 rounded-lg dark:bg-gray-500"></div>
                     <div style={{
@@ -118,7 +118,7 @@ const RecentImages = ({
                 }}
               >
                 {/* <Link href={`/image/${item.id}`}> */}
-                <div className="w-full h-60 p-2">
+                <div className="w-full h-[30vh] p-2">
                   <div className="h-1/6  w-full relative  z-10 flex justify-between pl-2 capitalize items-center">
                     {item.date}
                     {index !== -1 && menu === index ? (

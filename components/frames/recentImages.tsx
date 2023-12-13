@@ -18,7 +18,7 @@ const RecentImages = ({
   const options = [
     {
       name: "Open",
-      onClick: (item:datatype) => {
+      onClick: (item: datatype) => {
         window.open(item.url);
       },
     },
@@ -61,13 +61,13 @@ const RecentImages = ({
                 }}
                 key={item}
               >
-                <div className="w-full h-60 p-2">
+                <div className="w-full h-[30vh] p-2">
                   <div className="h-1/6 animate-pulse w-full  z-10 flex justify-between capitalize items-center">
                     <div className="bg-gray-300 h-5 w-1/2 rounded-lg dark:bg-gray-500"></div>
-                    <div 
-                    style={{
-                      filter: theme.invertImage ? "invert(1)" : "invert(0)",
-                    }}
+                    <div
+                      style={{
+                        filter: theme.invertImage ? "invert(1)" : "invert(0)",
+                      }}
                     >
                       <Image
                         src="/threeDotsVertical.svg"
@@ -120,7 +120,7 @@ const RecentImages = ({
                 }}
               >
                 {/* <Link href={`/image/${item.id}`}> */}
-                <div className="w-full h-60 p-2">
+                <div className="w-full h-[30vh] p-2">
                   <div className="h-1/6  relative w-full  z-20 flex justify-between pl-2 capitalize items-center">
                     {item.date}
 
@@ -164,7 +164,7 @@ const RecentImages = ({
                         className="absolute top-[2.5rem] right-1  rounded-md w-[6rem] h-[6rem]"
                         style={{
                           backgroundColor: theme.secondary,
-                          color: theme.secondaryText,                          
+                          color: theme.secondaryText,
                         }}
                       >
                         {options.map((Optionitem, key) => (
@@ -174,7 +174,7 @@ const RecentImages = ({
                           >
                             <div
                               onClick={() => {
-                                Optionitem.onClick?.call(null,item);
+                                Optionitem.onClick?.call(null, item);
                               }}
                               className="w-full h-8 flex justify-center items-center hover:bg-gray-200 hover:text-gray-700"
                               style={{
@@ -182,20 +182,20 @@ const RecentImages = ({
                                   key === options.length - 1
                                     ? "1px solid lightgray"
                                     : key === 0
-                                    ? "none"
-                                    : "1px solid lightgray",
+                                      ? "none"
+                                      : "1px solid lightgray",
                                 borderBottom:
                                   key === 0
                                     ? "1px solid lightgray"
                                     : key === options.length - 1
-                                    ? "none"
-                                    : "1px solid lightgray",
+                                      ? "none"
+                                      : "1px solid lightgray",
                                 borderRadius:
                                   key === 0
                                     ? "6px 6px 0 0"
                                     : key === options.length - 1
-                                    ? "0 0 6px 6px"
-                                    : "none",
+                                      ? "0 0 6px 6px"
+                                      : "none",
                               }}
                             >
                               {Optionitem.name}

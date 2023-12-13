@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "autoprefixer": "10.4.14",
+    "axios": "^1.6.2",
     "chart.js": "^4.3.0",
     "eslint": "8.38.0",
     "eslint-config-next": "13.3.0",
@@ -22,14 +23,14 @@
     "react-doc-viewer": "^0.1.5",
     "react-dom": "18.2.0",
     "styled-components": "6.0.0-rc.1",
-    "tailwindcss": "3.3.1",
-    "typescript": "5.0.4"
+    "tailwindcss": "3.3.1"
   },
   "devDependencies": {
     "@types/firebase": "^3.2.1",
     "@types/node": "18.15.11",
     "@types/react": "18.0.37",
     "@types/react-dom": "18.0.11",
-    "@types/styled-components": "^5.1.26"
+    "@types/styled-components": "^5.1.26",
+    "typescript": "5.0.4"
   }
 }

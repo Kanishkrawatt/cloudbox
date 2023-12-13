@@ -5,6 +5,7 @@ export interface datatype {
   size: number;
   type: string;
   url: string;
+  group?: string;
 }
 
 export type themeType = {
