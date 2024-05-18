@@ -6,8 +6,8 @@ import React, { useEffect, useState } from "react";
 import Styled from "styled-components";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useTheme } from "@/pages/contexts/theme";
-import { useMediaQuery } from "@/pages/contexts/mediaQuery";
+import { useTheme } from "@/utils/contexts/theme";
+import { useMediaQuery } from "@/utils/contexts/mediaQuery";
 
 const Sidebar = () => {
   const { sidebar } = useTheme();

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import RecentImages from "@/components/frames/images";
-import { useTheme } from "@/pages/contexts/theme";
+import { useTheme } from "@/utils/contexts/theme";
 import { imageType } from "@/components/types";
 import { useRouter } from "next/router";
 import Layout from "@/components/layouts/baseLayout";

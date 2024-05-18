@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { uploadBytesResumable, getDownloadURL,ref } from "firebase/storage";
 import { collection, doc, updateDoc, addDoc,getDoc } from "firebase/firestore";
-import { useAuth } from "./contexts/auth";
-import { useTheme } from "./contexts/theme";
+import { useAuth } from "../utils/contexts/auth";
+import { useTheme } from "../utils/contexts/theme";
 import storage from "@/firebase/storage";
 import db from "@/firebase/firestore";
 import { TempFilesData } from "./smartshare";

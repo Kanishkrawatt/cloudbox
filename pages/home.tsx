@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import RecentImages from "@/components/frames/recentImages";
 import RecentFiles from "@/components/frames/recentFiles";
 import { datatype } from "@/components/types";
-import { useAuth } from "./contexts/auth";
+import { useAuth } from "../utils/contexts/auth";
 import {
   collection,
   getDocs,
@@ -15,8 +15,8 @@ import {
   where,
 } from "firebase/firestore";
 import db from "@/firebase/firestore";
-import { useTheme } from "./contexts/theme";
-import { useMediaQuery } from "./contexts/mediaQuery";
+import { useTheme } from "../utils/contexts/theme";
+import { useMediaQuery } from "../utils/contexts/mediaQuery";
 import Layout from "@/components/layouts/baseLayout";
 
 function Home() {

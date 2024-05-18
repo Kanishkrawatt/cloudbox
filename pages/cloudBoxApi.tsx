@@ -4,7 +4,7 @@ import { serialize } from "next-mdx-remote/serialize";
 import { MDXRemote } from "next-mdx-remote";
 import { components } from "@/components/md";
 import Layout from "@/components/layouts/baseLayout";
-import { useTheme } from "./contexts/theme";
+import { useTheme } from "../utils/contexts/theme";
 
 const Api = ({ source }: { source: any }) => {
   const { theme } = useTheme();

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import AuthProvider, { useAuth } from "./contexts/auth";
+import AuthProvider, { useAuth } from "../utils/contexts/auth";
 function Login() {
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);

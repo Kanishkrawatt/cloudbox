@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import Image from "next/image";
-import { useAuth } from "./contexts/auth";
+import { useAuth } from "../utils/contexts/auth";
 import Upload from "./upload";
 import Login from "./login";
-import { useTheme } from "./contexts/theme";
+import { useTheme } from "../utils/contexts/theme";
 import { Preview, TempFilesData } from "./smartshare";
 import Layout from "@/components/layouts/baseLayout";
 export const ImageStatus = ({
