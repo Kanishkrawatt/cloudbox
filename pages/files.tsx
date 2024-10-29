@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useEffect } from "react";
-import { useTheme } from "./contexts/theme";
+import { useTheme } from "../utils/contexts/theme";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { datatype, fileType } from "@/components/types";
 import db from "@/firebase/firestore";
-import { useAuth } from "./contexts/auth";
+import { useAuth } from "../utils/contexts/auth";
 import FileFrame from "@/components/frames/files";
 import Layout from "@/components/layouts/baseLayout";
 

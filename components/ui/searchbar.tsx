@@ -1,8 +1,8 @@
 import Link from "next/link";
 import React from "react";
-import { useAuth } from "@/pages/contexts/auth";
+import { useAuth } from "@/utils/contexts/auth";
 import Image from "next/image";
-import { useMediaQuery } from "@/pages/contexts/mediaQuery";
+import { useMediaQuery } from "@/utils/contexts/mediaQuery";
 
 const Searchbar = () => {
   const { user } = useAuth();

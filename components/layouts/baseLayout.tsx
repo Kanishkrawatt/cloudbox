@@ -1,5 +1,5 @@
 import React from "react";
-import { useTheme } from "@/pages/contexts/theme";
+import { useTheme } from "@/utils/contexts/theme";
 import Sidebar from "@/components/ui/sidebar";
 import Searchbar from "@/components/ui/searchbar";
 

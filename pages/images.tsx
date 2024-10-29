@@ -10,8 +10,8 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import { useAuth } from "@/pages/contexts/auth";
-import { useTheme } from "@/pages/contexts/theme";
+import { useAuth } from "@/utils/contexts/auth";
+import { useTheme } from "@/utils/contexts/theme";
 import { datatype, imageType } from "@/components/types";
 
 
@@ -56,7 +56,6 @@ function Image() {
     if (!user?.uid) return;
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
-
   return (
     <Layout>
       {images.length > 0

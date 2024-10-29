@@ -1,8 +1,8 @@
 import React from "react";
 import Sidebar from "@/components/ui/sidebar";
 import Image from "next/image";
-import { useAuth } from "./contexts/auth";
-import { useTheme, sidebar1, sidebar2, theme1, theme2 } from "./contexts/theme";
+import { useAuth } from "../utils/contexts/auth";
+import { useTheme, sidebar1, sidebar2, theme1, theme2 } from "../utils/contexts/theme";
 
 function Profile() {
   const { user, UpdateUserDetails, signOut } = useAuth();

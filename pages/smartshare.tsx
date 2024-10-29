@@ -1,10 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useTheme } from "./contexts/theme";
+import { useTheme } from "../utils/contexts/theme";
 import Image from "next/image";
 import storage from "@/firebase/storage";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { useAuth } from "./contexts/auth";
+import { useAuth } from "../utils/contexts/auth";
 import db from "@/firebase/firestore";
 import { addDoc, collection, setDoc, doc } from "firebase/firestore";
 import Layout from "@/components/layouts/baseLayout";

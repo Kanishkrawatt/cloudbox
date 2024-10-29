@@ -1,8 +1,8 @@
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
-import AuthProvider from "./contexts/auth";
-import ThemeProvider from "./contexts/theme";
-import MediaQueryProvider from "./contexts/mediaQuery";
+import AuthProvider from "../utils/contexts/auth";
+import ThemeProvider from "../utils/contexts/theme";
+import MediaQueryProvider from "../utils/contexts/mediaQuery";
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (

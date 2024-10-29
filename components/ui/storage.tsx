@@ -1,6 +1,6 @@
 import React from "react";
-import { useAuth } from "../../pages/contexts/auth";
-import { useTheme } from "../../pages/contexts/theme";
+import { useAuth } from "../../utils/contexts/auth";
+import { useTheme } from "../../utils/contexts/theme";
 import db from "../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import {
