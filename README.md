@@ -51,14 +51,3 @@ Deletes a specific item from the storage.
   - Status: 200 OK
   - Content: JSON object with a success message
 
-### 4. **Delete Expired Data from Storage**
-
-Deletes expired data from the storage.
-
-- **Endpoint**: `/deleteExpiredData`
-- **Method**: `POST`
-- **Request Body**:
-  - None
-- **Response**:
-  - Status: 200 OK
-  - Content: JSON object with a success message
