@@ -38,7 +38,7 @@ export default function AuthProvider({
   children: React.ReactNode;
 }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -115,16 +115,20 @@ export default function AuthProvider({
       setError(error.message);
     }
   };
+  // These are promises: without await the try/catch never saw a failed login,
+  // so wrong-password errors were dropped instead of shown.
   const signIn = async (email: string, password: string) => {
+    setError(null);
     try {
-      signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       setError(error.message);
     }
   };
   const signUp = async (email: string, password: string) => {
+    setError(null);
     try {
-      createUserWithEmailAndPassword(auth, email, password);
+      await createUserWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       setError(error.message);
     }

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --test \"utils/**/*.test.ts\""
   },
   "dependencies": {
     "@google-cloud/vision": "^4.2.1",
