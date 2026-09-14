@@ -12,8 +12,7 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/utils/contexts/auth";
 import { useTheme } from "@/utils/contexts/theme";
-import Sidebar from "@/components/ui/sidebar";
-import Searchbar from "@/components/ui/searchbar";
+import Layout from "@/components/layouts/baseLayout";
 import { datatype, imageType } from "@/components/types";
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -51,31 +50,7 @@ function Image() {
   }, [getImageData, id]);
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        width: "100vw",
-        display: "flex",
-        flexDirection: "row",
-      }}
-    >
-      <Sidebar />
-      <div
-        className={`w-full max-h-[100vh]`}
-        style={{
-          backgroundColor: theme.primary,
-        }}
-      >
-        <div className="flex flex-wrap justify-evenly px-2 pt-2">
-          <Searchbar />
-        </div>
-        <div className="flex flex-wrap px-2 justify-start">
-          <div
-            className="w-full max-h-[90vh] overflow-auto"
-            style={{
-              backgroundColor: theme.primary,
-            }}
-          >
+    <Layout title="Smart Groups">
             {images.length > 0
               ? images.map((item, index) => (
                   <ImageGroup
@@ -87,17 +62,8 @@ function Image() {
                     title={item.date}
                   />
                 ))
-              : 
-                  <ImageGroup
-                    data={[]}
-                    loadingState={true}
-                    theme={theme}
-                  />
-                }
-          </div>
-        </div>
-      </div>
-    </div>
+              : <ImageGroup data={[]} loadingState={loading} theme={theme} />}
+    </Layout>
   );
 }
 

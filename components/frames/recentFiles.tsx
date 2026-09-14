@@ -1,12 +1,11 @@
 import Link from "next/link";
-import Image from "next/image";
 import React, { useCallback, useEffect, useState } from "react";
-import { themeType } from "@/components/types";
-import { useMediaQuery } from "@/utils/contexts/mediaQuery";
-import { getStaticProps } from "@/pages/cloudBoxApi";
 import axios from "axios";
+import { themeType } from "@/components/types";
 import { useAuth } from "@/utils/contexts/auth";
 import { useTheme } from "@/utils/contexts/theme";
+import { useSearch } from "@/utils/contexts/search";
+import Icon from "@/components/ui/icons";
 
 type FolderDataTypes = {
   name: string;
@@ -14,272 +13,146 @@ type FolderDataTypes = {
   size: number;
 };
 
+/** Folder strip on the dashboard, plus the create-folder dialog. */
 const RecentFiles = ({ theme }: { theme: themeType }) => {
-  const { isMobile, isTablet } = useMediaQuery();
   const [data, setData] = useState<FolderDataTypes[]>([]);
   const [modal, setModal] = useState<boolean>(false);
-
+  const [loading, setLoading] = useState<boolean>(true);
   const { user } = useAuth();
-  const getFoldersData = useCallback((async () => {
-    const data = await axios.post("/api/getFolders", {
-      uid: user?.uid
-    }).then((res) => { return res.data.data });
-    setData(data);
-  }), [user?.uid]);
+  const { query } = useSearch();
 
-  const handleClick = () => {
-    setModal(true);
-  }
-  const createFolder = useCallback((name: string) => {
-    axios.post("/api/addFolder", {
-      uid: user?.uid,
-      folderName: name
-    }).then(() => {
-      getFoldersData();
-    })
-  }, [getFoldersData, user?.uid]);
+  const getFoldersData = useCallback(async () => {
+    const folders = await axios
+      .post("/api/getFolders", { uid: user?.uid })
+      .then((res) => res.data.data as FolderDataTypes[]);
+    setData(folders ?? []);
+    setLoading(false);
+  }, [user?.uid]);
+
+  const createFolder = useCallback(
+    (name: string) => {
+      axios
+        .post("/api/addFolder", { uid: user?.uid, folderName: name })
+        .then(() => getFoldersData());
+    },
+    [getFoldersData, user?.uid]
+  );
 
   useEffect(() => {
     if (!user?.uid) return;
     getFoldersData();
   }, [getFoldersData, user?.uid]);
 
-  if (isMobile) {
-    setData(data.slice(0, 2))
-  }
-  return (
-    <div className="w-full h-full">
-      <h1
-        className={`font-medium py-5 px-7 `}
-        style={{
-          color: theme.text,
-        }}
-      >
-        RecentFiles
-      </h1>
+  // Derived during render: calling setData here re-rendered forever.
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? data.filter((item) => item.name?.toLowerCase().includes(q))
+    : data;
 
-      <div className="flex flex-wrap px-5 gap-3"
-        style={{
-          justifyContent: isMobile ? "space-between" : "flex-start",
-        }}
-      >
-        {data.length > 0 ?
-          data.map((item, index) => (
-            <div key={index} className="h-full"
-              style={{
-                width: isMobile ? "48%" : isTablet ? "30%" : "auto",
-              }}
-            >
-              <Link href={`/folder?name=${item.name}`}>
-                <button
-                  type="button"
-                  className={`inline-flex border border-transparent 
-                  items-center justify-evenly 
-                  text-sm font-medium
-                  rounded-lg focus:outline-none w-full`}
-                  style={{
-                    backgroundColor: theme.secondary,
-                    color: theme.secondaryText,
-                    padding: isMobile ? "4vw 2vw 4vw 0vw" : "1rem 2vw 1rem 1vw",
-                  }}
-                >
-                  <span
-                    className={`inline-flex items-center my-2 relative rounded-full`}
-                    style={{
-                      margin: isMobile ? "0 0.25rem" : "0 0.5rem",
-                      height: "2rem",
-                      width: "2rem",
-                    }}
-                  >
-                    <Image alt="folder" fill src="/file.svg" />
-                  </span>
-                  {item?.name}
-                </button>
-              </Link>
-            </div>
-          ))
-          :
-          [1, 2, 3, 4].map((item, index) => (
-            <div key={index} className="h-full"
-              style={{
-                width: isMobile ? "48%" : isTablet ? "30%" : "auto",
-              }}
-            >
-              <button
-                type="button"
-                className={`inline-flex border border-transparent 
-                  items-center justify-evenly 
-                  text-sm font-medium
-                  rounded-lg focus:outline-none w-full`}
-                style={{
-                  backgroundColor: theme.secondary,
-                  color: theme.secondaryText,
-                  padding: isMobile ? "4vw 2vw 4vw 0vw" : "1rem 2vw 1rem 1vw",
-                }}
-              >
-                <span
-                  className={`inline-flex items-center my-2 relative rounded-full`}
-                  style={{
-                    margin: isMobile ? "0 0.25rem" : "0 0.5rem",
-                    height: "2rem",
-                    width: "2rem",
-                  }}
-                >
-                  <Image alt="folder" fill src="/file.svg" />
-                </span>
-                Folder {index}
-              </button>
-            </div>
-          ))
-        }
-        {isMobile && (
-          <div className="h-full"
-            style={{
-              width: isMobile ? "48%" : isTablet ? "30%" : "auto",
-            }}
-          >
-            <Link href={`#`}>
-              <button
-                type="button"
-                className={`inline-flex border border-transparent items-center justify-evenly text-sm font-medium rounded-lg focus:outline-none w-full`}
-                style={{
-                  backgroundColor: theme.secondary,
-                  color: theme.secondaryText,
-                  padding: isMobile ? "4vw 2vw 4vw 0vw" : "1rem 2vw 1rem 1vw",
-                }}
-              >
-                <span
-                  className={`inline-flex items-center my-2 relative rounded-full`}
-                  style={{
-                    margin: isMobile ? "0 0.25rem" : "0 0.5rem",
-                    height: "2rem",
-                    width: "2rem",
-                  }}
-                >
-                  <Image alt="folder" fill src="/file.svg" />
-                </span>
-                More ...
-              </button>
-            </Link>
-          </div>
+  return (
+    <section className="px-4 py-5 sm:px-6">
+      <div className="mb-3 flex items-baseline gap-2">
+        <h2 className="section-label">Folders</h2>
+        {!loading && (
+          <span className="text-[11px]" style={{ color: theme.muted }}>
+            {visible.length}
+          </span>
         )}
-        <div className="h-full"
-          style={{
-            width: isMobile ? "48%" : isTablet ? "30%" : "auto",
-          }}
-        >
-          <button
-            type="button"
-            className={`inline-flex border border-transparent 
-                  items-center justify-evenly  px-6 
-                  text-sm font-medium
-                  rounded-lg focus:outline-none w-full`}
-            onClick={handleClick}
-            style={{
-              backgroundColor: theme.secondary,
-              color: theme.secondaryText,
-              padding: isMobile ? "4vw 2vw 4vw 0vw" : "1rem 2vw 1rem 1vw",
-            }}
-          >
-            <span
-              className={`inline-flex items-center my-2 relative rounded-full`}
-              style={{
-                margin: isMobile ? "0 0.25rem" : "0 0.5rem",
-                height: "2rem",
-                width: "2rem",
-              }}
-            >
-              <Image alt="folder" fill src="/icons8-plus-30.svg"
-                style={{
-                  filter: `invert(${theme?.sidebar?.invertImage ? "0" : "1"})`,
-                }}
-              />
-            </span>
-            Add New
-          </button>
-        </div>
       </div>
-      {modal &&
-        <CreateFolder addFolder={createFolder} setModal={setModal} />
-      }
-    </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {loading
+          ? [1, 2, 3].map((i) => (
+              <div key={i} className="skeleton h-[3.25rem] rounded-lg" />
+            ))
+          : visible.map((item) => (
+              <Link
+                key={item.name}
+                href={`/folder?name=${encodeURIComponent(item.name)}`}
+                className="card flex items-center gap-2.5 px-3 py-3 text-[13px]"
+                title={item.name}
+              >
+                <Icon name="folder" size={17} className="shrink-0" />
+                <span className="truncate">{item.name}</span>
+              </Link>
+            ))}
+
+        <button
+          type="button"
+          onClick={() => setModal(true)}
+          className="card flex items-center gap-2.5 px-3 py-3 text-[13px]"
+          style={{ color: theme.muted, borderStyle: "dashed" }}
+        >
+          <Icon name="plus" size={17} className="shrink-0" />
+          New folder
+        </button>
+      </div>
+
+      {modal && <CreateFolder addFolder={createFolder} setModal={setModal} />}
+    </section>
   );
 };
 
 export default RecentFiles;
 
-
-export const CreateFolder = ({ addFolder, setModal }: {
-  addFolder: (name: string) => void
-  setModal: (value: boolean) => void
+export const CreateFolder = ({
+  addFolder,
+  setModal,
+}: {
+  addFolder: (name: string) => void;
+  setModal: (value: boolean) => void;
 }) => {
   const { theme } = useTheme();
   const [folderName, setFolderName] = useState<string>("");
   const [error, setError] = useState<string>("");
-  const handleCreateFolder = () => {
-    if (folderName.length < 3) {
+
+  const handleCreateFolder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (folderName.trim().length < 3) {
       setError("Folder name must be at least 3 characters");
       return;
     }
-    addFolder(folderName);
+    addFolder(folderName.trim());
     setModal(false);
-  }
+  };
+
   return (
-    <div className="h-[100vh] w-[100vw] flex overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center md:inset-0 max-h-full">
-      <div className="relative p-4 w-full max-w-md max-h-full">
-        <div className="relative rounded-lg shadow "
-          style={{
-            backgroundColor: theme.secondary,
-            color: theme.secondaryText,
-          }}
-        >
-          <button
-            type="button"
-            className="absolute top-3 end-2.5  bg-transparent rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center"
-            onClick={() => setModal(false)}
-          >
-            <svg
-              className="w-3 h-3"
-              aria-hidden="true"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 14 14"
-            >
-              <path
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6"
-              />
-            </svg>
-            <span className="sr-only">Close modal</span>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={() => setModal(false)}
+    >
+      <form
+        onSubmit={handleCreateFolder}
+        onClick={(e) => e.stopPropagation()}
+        className="menu w-full max-w-sm p-5"
+        style={{ color: theme.text }}
+      >
+        <h3 className="page-title mb-4">New folder</h3>
+        <input
+          type="text"
+          autoFocus
+          placeholder="Folder name"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+          className="field h-10 text-[13px]"
+          style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+        />
+        {error && (
+          <p className="mt-2 text-[12px]" style={{ color: "#e5484d" }}>
+            {error}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn h-9 text-[13px]" onClick={() => setModal(false)}>
+            Cancel
           </button>
-          <div className="p-4 md:p-5">
-            <h3 className="mb-5 text-lg text-center font-normal ">
-              Create a new folder
-            </h3>
-            <input
-              type="text"
-              placeholder="Folder name"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              className="w-full p-2 text-center rounded-lg"
-              style={{
-                backgroundColor: theme.primary,
-                color: theme.secondaryText,
-              }}
-            />
-            <p className="text-red-500 text-sm">{error}</p>
-            <button
-              onClick={handleCreateFolder}
-              className="w-full mt-4 text-white bg-blue-600 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:focus:ring-blue-800 font-medium rounded-lg text-sm px-5 py-2.5"
-            >
-              Create
-            </button>
-          </div>
+          <button type="submit" className="btn btn-primary h-9 text-[13px]">
+            Create
+          </button>
         </div>
-      </div>
+      </form>
     </div>
-  )
-}
+  );
+};

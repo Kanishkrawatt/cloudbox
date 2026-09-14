@@ -4,8 +4,8 @@ import Layout from "@/components/layouts/baseLayout";
 
 function Storage() {
   return (
-    <Layout>
-      <div className="flex w-full flex-wrap px-10 justify-start">
+    <Layout title="Storage">
+      <div className="px-4 py-6 sm:px-6">
         <StoragePage />
       </div>
     </Layout>
