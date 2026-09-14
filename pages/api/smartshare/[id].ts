@@ -7,6 +7,8 @@ export type SharePayload = {
   date: string;
   expiresInDays: number | null;
   expiresOn: string | null;
+  /** "running" while the AI is still grouping, "done" once people are ready. */
+  faceStatus: "running" | "done" | "failed" | null;
   /** Present when the owner enabled face sorting; photos may repeat across people. */
   people: {
     photos: string[];
@@ -68,6 +70,7 @@ export default async function handler(
       date: share.date ?? "",
       expiresInDays: share.time ?? null,
       expiresOn: expiresOn ? expiresOn.toDateString() : null,
+      faceStatus: share.faceStatus ?? (share.faceGroups ? "done" : null),
       people: share.faceGroups?.people ?? [],
       noFaces: share.faceGroups?.noFaces ?? [],
       files: filesSnap.docs.map((d) => {

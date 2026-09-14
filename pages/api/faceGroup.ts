@@ -105,13 +105,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await shareImageUrls(uid, shareId),
       threshold
     );
-    await setDoc(shareRef, { faceGroups: stored, sortByFace: true }, { merge: true });
+    await setDoc(
+      shareRef,
+      { faceGroups: stored, sortByFace: true, faceStatus: "done" },
+      { merge: true }
+    );
     return res.status(200).json({ state: "done", ...stored });
   }
 
   const urls = await shareImageUrls(uid, shareId);
 
   if (urls.length < 2) {
+    await setDoc(shareRef, { faceStatus: "failed" }, { merge: true });
     return res.status(400).json({ error: "Add at least two photos to sort by face." });
   }
 
@@ -119,7 +124,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // the serverless timeout on a 0.1 CPU instance.
   if (urls.length > JOB_THRESHOLD) {
     const { ok, status, body } = await submitFaceJob(urls, threshold);
-    if (!ok) return res.status(status).json({ error: faceApiError(status, body) });
+    if (!ok) {
+      await setDoc(shareRef, { faceStatus: "failed" }, { merge: true });
+      return res.status(status).json({ error: faceApiError(status, body) });
+    }
     return res.status(202).json({ state: "queued", jobId: body.jobId, images: body.images });
   }
 
@@ -127,6 +135,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!ok) return res.status(status).json({ error: faceApiError(status, body) });
 
   const stored = toStored(body as FaceGroupResult, urls, threshold);
-  await setDoc(shareRef, { faceGroups: stored, sortByFace: true }, { merge: true });
+  await setDoc(
+    shareRef,
+    { faceGroups: stored, sortByFace: true, faceStatus: "done" },
+    { merge: true }
+  );
   return res.status(200).json({ state: "done", ...stored });
 }

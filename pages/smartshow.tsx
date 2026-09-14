@@ -30,8 +30,8 @@ function SmartShow() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (shareId: string) => {
-    setLoading(true);
+  const load = useCallback(async (shareId: string, quiet = false) => {
+    if (!quiet) setLoading(true);
     const res = await fetch(`/api/smartshare/${shareId}`);
     const body = await res.json();
     if (!res.ok) {
@@ -53,6 +53,14 @@ function SmartShow() {
     }
     load(String(id));
   }, [router.isReady, id, load]);
+
+  // Sorting runs after the share is created, so a recipient who opens the link
+  // straight away sees the banner and then the people row, without reloading.
+  useEffect(() => {
+    if (share?.faceStatus !== "running" || !id) return;
+    const timer = setInterval(() => load(String(id), true), 10000);
+    return () => clearInterval(timer);
+  }, [share?.faceStatus, id, load]);
 
   const download = async (url: string, name: string) => {
     const res = await fetch(url);
@@ -122,6 +130,49 @@ function SmartShow() {
                 {share.expiresOn ? ` · available until ${share.expiresOn}` : ""}
               </p>
             </div>
+
+            {share.faceStatus === "running" && (
+              <div
+                className="mb-6 flex items-center gap-3 rounded-xl px-4 py-3"
+                role="status"
+                aria-live="polite"
+                style={{
+                  border: `1px solid ${theme.accent}`,
+                  backgroundColor: theme.secondary,
+                }}
+              >
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.accent, color: theme.primary }}
+                >
+                  <Icon name="sparkle" size={15} strokeWidth={2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium">
+                    Sorting these photos by face
+                  </p>
+                  <p className="text-[12px]" style={{ color: theme.muted }}>
+                    People will appear here in a minute. The photos below are all
+                    ready to view now.
+                  </p>
+                </div>
+                <span
+                  className="h-2 w-2 shrink-0 animate-pulse rounded-full"
+                  style={{ backgroundColor: theme.accent }}
+                  aria-hidden="true"
+                />
+              </div>
+            )}
+
+            {share.faceStatus === "failed" && share.people?.length === 0 && (
+              <div
+                className="mb-6 rounded-xl px-4 py-3 text-[13px]"
+                style={{ border: `1px solid ${theme.border}`, color: theme.muted }}
+              >
+                Sorting by face did not finish for this share. All the photos are
+                still here.
+              </div>
+            )}
 
             {share.people?.length > 0 && (
               <div className="mb-7 -mx-1 flex gap-4 overflow-x-auto px-1 pb-2">

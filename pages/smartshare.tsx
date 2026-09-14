@@ -113,6 +113,9 @@ function Smartshare() {
         // Path only: an absolute URL here would pin the share to whatever host
         // happened to create it.
         path,
+        sortByFace,
+        // Recipients see a banner while this is not "done".
+        faceStatus: sortByFace ? "running" : null,
       });
 
       for (let i = 0; i < files.length; i++) {
