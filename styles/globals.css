@@ -1,28 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald&family=Rum+Raisin&family=Ubuntu&display=swap");
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+
+/* Palette variables per theme live in _document (generated from THEMES). */
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
+
 * {
-  scrollbar-width: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
-
 *::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
@@ -30,19 +41,128 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #ffa559 ;
+  background-color: var(--border);
+  border-radius: 999px;
 }
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
 @layer components {
-  .font-BeasNeue {
-    font-family: "Bebas Neue", cursive;
+  /* Page title: one size, used on every screen. */
+  .page-title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
-  .font-Oswald {
-    font-family: "Oswald", sans-serif;
+  /* Group heading above a grid or list. */
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
   }
-  .font-RumRaisin {
-    font-family: "Rum Raisin", sans-serif;
+  .surface {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
   }
-  .font-Ubuntu {
-    font-family: "Ubuntu", sans-serif;
+  /* Flat, bordered, no lift, hover only warms the background. */
+  .card {
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover {
+    background-color: var(--surface);
+  }
+  .field {
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:hover:not(:disabled) {
+    background-color: var(--surface);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+  }
+  .btn-primary {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--accent);
+    filter: brightness(1.06);
+  }
+  .menu {
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 28px -18px rgb(0 0 0 / 60%);
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4375rem 0.625rem;
+    border-radius: 6px;
+    text-align: left;
+  }
+  .menu-item:hover {
+    background-color: var(--surface);
+  }
+  .skeleton {
+    background-color: var(--surface);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
   }
 }
