@@ -5,7 +5,6 @@ const firebaseConfig = {
   authDomain: process.env.NEXT_PUBLIC_auth_Domain,
   databaseURL: process.env.NEXT_PUBLIC_database_URL,
   projectId: process.env.NEXT_PUBLIC_project_Id,
-  storageBucket: process.env.NEXT_PUBLIC_storage_Bucket,
   messagingSenderId: process.env.NEXT_PUBLIC_messaging_Sender_Id,
   appId: process.env.NEXT_PUBLIC_app_Id,
   measurementId: process.env.NEXT_PUBLIC_measurement_Id,
