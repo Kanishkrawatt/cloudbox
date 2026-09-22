@@ -16,7 +16,6 @@ export const MENUS: MenuItem[] = [
   { title: "Upload", icon: "upload", link: "/uploadFile", group: 1 },
   { title: "Smart Share", icon: "share", link: "/smartshare", group: 1 },
   { title: "Storage", icon: "chart", link: "/storage", group: 2 },
-  { title: "API", icon: "code", link: "/cloudBoxApi", group: 2 },
 ];
 
 const isActive = (pathname: string, link: string) =>
