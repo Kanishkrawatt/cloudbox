@@ -8,6 +8,7 @@ import { useAuth } from "../utils/contexts/auth";
 import { useTheme } from "../utils/contexts/theme";
 import { TempFilesData } from "./smartshare";
 import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
+import { analyseImage, type ImageMeta } from "@/utils/imageMetaBrowser";
 
 type Folder = { name: string; id: string };
 
@@ -83,7 +84,8 @@ export function UploadFile() {
       file: File,
       upload: { url: string; publicId: string; resourceType: string },
       newName: string,
-      folderId: string
+      folderId: string,
+      meta?: ImageMeta
     ) => {
       // An empty folderId would produce "Folders//Images", not a valid path.
       const path = folderId
@@ -98,6 +100,10 @@ export function UploadFile() {
         publicId: upload.publicId,
         resourceType: upload.resourceType,
         date: new Date().toDateString(),
+        // Firestore rejects undefined, so only set what we have.
+        ...(meta?.phash ? { phash: meta.phash } : {}),
+        ...(meta?.text ? { text: meta.text } : {}),
+        ...(meta?.tags?.length ? { tags: meta.tags } : {}),
       });
     },
     [user?.uid]
@@ -128,6 +134,11 @@ export function UploadFile() {
         ? `Folders/${folderId}/${kindOf(file)}`
         : kindOf(file);
 
+      // Hash + OCR run locally while the bytes upload; both are best-effort.
+      const metaPromise = file.type.startsWith("image/")
+        ? analyseImage(file, { folder: folderName || undefined })
+        : Promise.resolve(undefined);
+
       const upload = await uploadToCloudinary({
         file,
         idToken,
@@ -137,13 +148,16 @@ export function UploadFile() {
           setProgress((prev) => prev.map((p, i) => (i === index ? pct : p))),
       });
 
-      await writeMetadata(file, upload, newName, folderId);
       setProgress((prev) => prev.map((p, i) => (i === index ? 100 : p)));
+      setQueue((prev) =>
+        prev.map((item, i) => (i === index ? { ...item, status: "analysing" } : item))
+      );
+      await writeMetadata(file, upload, newName, folderId, await metaPromise);
       setQueue((prev) =>
         prev.map((item, i) => (i === index ? { ...item, status: "success" } : item))
       );
     },
-    [user, writeMetadata]
+    [user, writeMetadata, folderName]
   );
 
   const pendingSize = queue
@@ -354,6 +368,8 @@ export function UploadFile() {
                     <span className="shrink-0 text-[11px]" style={{ color: theme.muted }}>
                       {item.status === "success"
                         ? "Done"
+                        : item.status === "analysing"
+                        ? "Reading text…"
                         : progress[index]
                         ? `${progress[index]}%`
                         : prettySize(item.file.size)}

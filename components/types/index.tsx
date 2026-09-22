@@ -9,6 +9,10 @@ export interface datatype {
   /** Cloudinary identifiers, absent on items uploaded before the swap. */
   publicId?: string;
   resourceType?: string;
+  /** Upload-time analysis (images only); see utils/imageMeta.ts. */
+  phash?: string;
+  text?: string;
+  tags?: string[];
 }
 
 export type sidebarType = {

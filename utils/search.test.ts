@@ -21,6 +21,16 @@ test("items without a name are dropped, not thrown on", () => {
   assert.deepEqual(filterItems("zzz", items), []);
 });
 
+test("tags and OCR text are searchable too", () => {
+  const rich = [
+    { name: "IMG_2041.png", tags: ["screenshot", "invoice"], text: "Total due 42.00" },
+    { name: "beach.png", tags: ["image"] },
+  ];
+  assert.equal(filterItems("invoice", rich).length, 1);
+  assert.equal(filterItems("total due", rich).length, 1);
+  assert.equal(filterItems("beach", rich).length, 1);
+});
+
 test("groups keep only matching members and drop empty groups", () => {
   const groups = [
     { date: "Mon", data: [{ name: "a.png" }, { name: "b.png" }] },
