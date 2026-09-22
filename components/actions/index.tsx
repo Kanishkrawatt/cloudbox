@@ -28,12 +28,14 @@ export type ModalObject = {
     };
 }
 
-export const Actions = ({ theme, item, index,menu,setMenu }: {
+export const Actions = ({ theme, item, index, menu, setMenu, variant = "row" }: {
     theme: themeType,
     item: datatype,
     index: number
     menu : number
     setMenu : Dispatch<SetStateAction<number>>
+    /** "tile" sits on top of a thumbnail and matches the round select control. */
+    variant?: "tile" | "row"
 }) => {
     const router = useRouter();
     const [modal, setModal] = useState<ModalObject>({ status: "", item: { name: "", url: "" } })
@@ -95,14 +97,26 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
                 type="button"
                 aria-label={open ? "Close actions" : "File actions"}
                 aria-expanded={open}
-                className="flex h-7 w-7 items-center justify-center rounded-md"
-                style={{ color: theme.muted }}
+                className={
+                    variant === "tile"
+                        ? "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors"
+                        : "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface)]"
+                }
+                style={
+                    variant === "tile"
+                        ? {
+                              borderColor: open ? theme.accent : "#fff",
+                              backgroundColor: open ? theme.accent : "rgba(0,0,0,0.35)",
+                              color: open ? theme.primary : "#fff",
+                          }
+                        : { color: open ? theme.text : theme.muted }
+                }
                 onClick={(e) => {
                     e.stopPropagation();
                     handleClick(index);
                 }}
             >
-                <Icon name={open ? "close" : "more"} size={16} strokeWidth={2} />
+                <Icon name={open ? "close" : "more"} size={variant === "tile" ? 14 : 16} strokeWidth={2.4} />
             </button>
             {open && (
                 <div role="menu" className="menu absolute right-0 top-8 z-40 w-48 p-1.5">

@@ -147,15 +147,11 @@ const RecentImages = ({
                 {/* Outside the clipped tile so the dropdown is never cut off;
                     always visible on touch screens, hover-revealed with a mouse. */}
                 <div
-                  className={`absolute right-1 top-1 rounded-md transition-opacity ${
+                  className={`absolute right-1.5 top-1.5 transition-opacity ${
                     menu === index
                       ? "opacity-100"
                       : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
                   }`}
-                  style={{
-                    backgroundColor: theme.primary,
-                    border: `1px solid ${theme.border}`,
-                  }}
                 >
                   <Actions
                     theme={theme}
@@ -163,6 +159,7 @@ const RecentImages = ({
                     index={index}
                     menu={menu}
                     setMenu={setMenu}
+                    variant="tile"
                   />
                 </div>
                 <figcaption className="mt-1.5 min-w-0">
