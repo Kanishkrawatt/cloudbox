@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import Layout from "@/components/layouts/baseLayout";
 import { useAuth } from "../utils/contexts/auth";
@@ -159,7 +160,7 @@ function Profile() {
 
         <Section
           title="API token"
-          description="Send this as a bearer token to reach your files over the API."
+          description="Your user id; pass it as `uid` in the request body for the read routes."
         >
           <div className="flex max-w-lg items-center gap-2">
             <input
@@ -175,6 +176,10 @@ function Profile() {
               {copyState ? "Copied" : "Copy"}
             </button>
           </div>
+          <Link href="/cloudBoxApi" className="mt-3 inline-flex items-center gap-1.5 text-[13px]" style={{ color: theme.accent }}>
+            <Icon name="code" size={14} />
+            Read the API reference
+          </Link>
         </Section>
 
         <Section title="Appearance" description="Applies to every screen, remembered on this device.">
