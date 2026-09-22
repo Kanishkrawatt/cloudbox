@@ -1,12 +1,10 @@
-import { dHashFromGray, tagsFor } from "./imageMeta";
+import { dHashFromGray } from "./imageMeta";
 
 /**
  * Browser side of upload-time image analysis. Runs before the bytes leave the
  * machine, so nothing here costs a Cloudinary add-on or a server round trip.
  * Every step is best-effort: a failure returns partial metadata, never throws.
  */
-export type ImageMeta = { phash?: string; text?: string; tags: string[] };
-
 /** OCR is slow and memory-hungry; skip anything this large. */
 const OCR_MAX_BYTES = 8 * 1024 ** 2;
 
@@ -53,15 +51,4 @@ export const extractText = async (file: File, onProgress?: (pct: number) => void
   const text = result.data.text.replace(/\s+/g, " ").trim();
   // Anything under a few words is noise from a photo, not a document.
   return text.split(" ").length >= 3 ? text.slice(0, 2000) : undefined;
-};
-
-export const analyseImage = async (
-  file: File,
-  opts: { folder?: string; ocr?: boolean; onOcrProgress?: (pct: number) => void } = {}
-): Promise<ImageMeta> => {
-  const [phash, text] = await Promise.all([
-    computePhash(file).catch(() => undefined),
-    opts.ocr === false ? Promise.resolve(undefined) : extractText(file, opts.onOcrProgress).catch(() => undefined),
-  ]);
-  return { phash, text, tags: tagsFor({ type: file.type, folder: opts.folder, text }) };
 };

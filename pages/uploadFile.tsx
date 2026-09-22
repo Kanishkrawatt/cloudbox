@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { collection, doc, updateDoc, addDoc, getDoc } from "firebase/firestore";
+import { collection, doc, updateDoc, addDoc, increment } from "firebase/firestore";
 import Layout from "@/components/layouts/baseLayout";
 import Icon from "@/components/ui/icons";
 import db from "@/firebase/firestore";
@@ -8,9 +8,22 @@ import { useAuth } from "../utils/contexts/auth";
 import { useTheme } from "../utils/contexts/theme";
 import { TempFilesData } from "./smartshare";
 import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
-import { analyseImage, type ImageMeta } from "@/utils/imageMetaBrowser";
+import { computePhash, extractText } from "@/utils/imageMetaBrowser";
+import { tagsFor } from "@/utils/imageMeta";
 
 type Folder = { name: string; id: string };
+
+/** Parallel uploads; Cloudinary handles many, the browser's connection pool is the real cap. */
+const CONCURRENCY = 3;
+
+/** Runs `fn` over `items` with at most `limit` in flight. */
+const pool = async <T,>(items: T[], limit: number, fn: (item: T) => Promise<void>) => {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+};
 
 const mb = (bytes: number) => bytes / 1024 ** 2;
 const prettySize = (bytes: number) =>
@@ -85,13 +98,13 @@ export function UploadFile() {
       upload: { url: string; publicId: string; resourceType: string },
       newName: string,
       folderId: string,
-      meta?: ImageMeta
+      phash?: string
     ) => {
       // An empty folderId would produce "Folders//Images", not a valid path.
       const path = folderId
         ? `User/${user?.uid}/Folders/${folderId}/${kindOf(file)}`
         : `User/${user?.uid}/${kindOf(file)}`;
-      await addDoc(collection(db, path), {
+      return addDoc(collection(db, path), {
         name: newName,
         size: file.size,
         location: "Home",
@@ -100,29 +113,44 @@ export function UploadFile() {
         publicId: upload.publicId,
         resourceType: upload.resourceType,
         date: new Date().toDateString(),
+        tags: tagsFor({ type: file.type, folder: folderName || undefined }),
         // Firestore rejects undefined, so only set what we have.
-        ...(meta?.phash ? { phash: meta.phash } : {}),
-        ...(meta?.text ? { text: meta.text } : {}),
-        ...(meta?.tags?.length ? { tags: meta.tags } : {}),
+        ...(phash ? { phash } : {}),
       });
     },
-    [user?.uid]
+    [user?.uid, folderName]
   );
 
-  const chargeQuota = useCallback(
-    async (size: number) => {
-      const userDocRef = doc(db, "User", `${user?.uid}`);
-      const snap = await getDoc(userDocRef);
-      const Storage = snap.data()?.Storage;
-      if (!Storage) return;
-      await updateDoc(userDocRef, {
-        Storage: {
-          ...Storage,
-          Used: Storage.Used + mb(size),
-          Free: Storage.Free - mb(size),
-        },
-      });
+  // OCR runs after the row exists and patches text/tags in when it finishes,
+  // so a slow read never holds up the upload. One at a time: tesseract is
+  // CPU-bound and several workers just fight each other.
+  const [reading, setReading] = useState(0);
+  const ocrQueue = useRef(Promise.resolve());
+  const readTextLater = useCallback(
+    (file: File, ref: { path: string }) => {
+      setReading((n) => n + 1);
+      ocrQueue.current = ocrQueue.current
+        .then(async () => {
+          const text = await extractText(file).catch(() => undefined);
+          if (!text) return;
+          await updateDoc(doc(db, ref.path), {
+            text,
+            tags: tagsFor({ type: file.type, folder: folderName || undefined, text }),
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => setReading((n) => n - 1));
     },
+    [folderName]
+  );
+
+  // Atomic increments, so parallel uploads cannot overwrite each other's totals.
+  const chargeQuota = useCallback(
+    (size: number) =>
+      updateDoc(doc(db, "User", `${user?.uid}`), {
+        "Storage.Used": increment(mb(size)),
+        "Storage.Free": increment(-mb(size)),
+      }),
     [user?.uid]
   );
 
@@ -134,10 +162,9 @@ export function UploadFile() {
         ? `Folders/${folderId}/${kindOf(file)}`
         : kindOf(file);
 
-      // Hash + OCR run locally while the bytes upload; both are best-effort.
-      const metaPromise = file.type.startsWith("image/")
-        ? analyseImage(file, { folder: folderName || undefined })
-        : Promise.resolve(undefined);
+      // The hash takes milliseconds; compute it while the bytes are in flight.
+      const isImage = file.type.startsWith("image/");
+      const phashPromise = isImage ? computePhash(file).catch(() => undefined) : Promise.resolve(undefined);
 
       const upload = await uploadToCloudinary({
         file,
@@ -148,16 +175,15 @@ export function UploadFile() {
           setProgress((prev) => prev.map((p, i) => (i === index ? pct : p))),
       });
 
+      const ref = await writeMetadata(file, upload, newName, folderId, await phashPromise);
+      await chargeQuota(file.size);
       setProgress((prev) => prev.map((p, i) => (i === index ? 100 : p)));
-      setQueue((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, status: "analysing" } : item))
-      );
-      await writeMetadata(file, upload, newName, folderId, await metaPromise);
       setQueue((prev) =>
         prev.map((item, i) => (i === index ? { ...item, status: "success" } : item))
       );
+      if (isImage) readTextLater(file, ref);
     },
-    [user, writeMetadata, folderName]
+    [user, writeMetadata, chargeQuota, readTextLater]
   );
 
   const pendingSize = queue
@@ -182,22 +208,21 @@ export function UploadFile() {
     setUploading(true);
     const folderId = folders.find((f) => f.name === folderName)?.id ?? "";
 
-    // Sequential: chargeQuota is a read-modify-write on one document, so
-    // parallel uploads used to overwrite each other's totals.
-    try {
-      for (let i = 0; i < queue.length; i++) {
-        if (queue[i].status === "success") continue;
-        // Charge only after the bytes actually landed, or a failed upload
-        // (bad rules, no Blaze plan, lost connection) still eats quota.
+    const pending = queue.map((item, i) => i).filter((i) => queue[i].status !== "success");
+    const failures: string[] = [];
+    // Quota is charged per file only after its bytes landed, so a failed
+    // upload never eats space.
+    await pool(pending, CONCURRENCY, async (i) => {
+      try {
         await uploadOne(queue[i].file, names[i], i, folderId);
-        await chargeQuota(queue[i].file.size);
+      } catch (err: any) {
+        failures.push(`${names[i]}: ${err?.message ?? "failed"}`);
+        setQueue((prev) => prev.map((item, k) => (k === i ? { ...item, status: "error" } : item)));
       }
-      await refreshQuota();
-    } catch (err: any) {
-      setError(err?.message ?? "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
+    });
+    if (failures.length) setError(failures.join(" · "));
+    await refreshQuota();
+    setUploading(false);
   };
 
   const done = queue.length > 0 && queue.every((item) => item.status === "success");
@@ -308,6 +333,13 @@ export function UploadFile() {
           </button>
         </div>
 
+        {reading > 0 && (
+          <p className="mt-3 text-[12px]" style={{ color: theme.muted }}>
+            Reading text from {reading} image{reading === 1 ? "" : "s"} in the background so you can search
+            by what&apos;s in them. Keep this tab open until it finishes.
+          </p>
+        )}
+
         {error && (
           <p
             className="mt-3 rounded-lg px-3 py-2 text-[13px]"
@@ -368,8 +400,8 @@ export function UploadFile() {
                     <span className="shrink-0 text-[11px]" style={{ color: theme.muted }}>
                       {item.status === "success"
                         ? "Done"
-                        : item.status === "analysing"
-                        ? "Reading text…"
+                        : item.status === "error"
+                        ? "Failed"
                         : progress[index]
                         ? `${progress[index]}%`
                         : prettySize(item.file.size)}
