@@ -131,23 +131,22 @@ const RecentImages = ({
                     e.stopPropagation();
                     selection.toggle(item);
                   }}
-                  className={`absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-opacity ${
+                  className={`absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full shadow-sm backdrop-blur-sm transition-opacity ${
                     selected || selecting
                       ? "opacity-100"
                       : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                   }`}
                   style={{
-                    borderColor: selected ? theme.accent : "#fff",
-                    backgroundColor: selected ? theme.accent : "rgba(0,0,0,0.35)",
-                    color: theme.primary,
+                    backgroundColor: selected ? theme.accent : "rgba(0,0,0,0.45)",
+                    color: selected ? theme.primary : "#fff",
                   }}
                 >
-                  {selected && <Icon name="check" size={13} strokeWidth={3} />}
+                  <Icon name="check" size={16} strokeWidth={3} className={selected ? "" : "opacity-60"} />
                 </button>
                 {/* Outside the clipped tile so the dropdown is never cut off;
                     always visible on touch screens, hover-revealed with a mouse. */}
                 <div
-                  className={`absolute right-1.5 top-1.5 transition-opacity ${
+                  className={`absolute right-2 top-2 transition-opacity ${
                     menu === index
                       ? "opacity-100"
                       : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"

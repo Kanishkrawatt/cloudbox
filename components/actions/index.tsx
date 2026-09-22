@@ -99,14 +99,13 @@ export const Actions = ({ theme, item, index, menu, setMenu, variant = "row" }: 
                 aria-expanded={open}
                 className={
                     variant === "tile"
-                        ? "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors"
+                        ? "flex h-8 w-8 items-center justify-center rounded-full shadow-sm backdrop-blur-sm transition-colors"
                         : "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface)]"
                 }
                 style={
                     variant === "tile"
                         ? {
-                              borderColor: open ? theme.accent : "#fff",
-                              backgroundColor: open ? theme.accent : "rgba(0,0,0,0.35)",
+                              backgroundColor: open ? theme.accent : "rgba(0,0,0,0.45)",
                               color: open ? theme.primary : "#fff",
                           }
                         : { color: open ? theme.text : theme.muted }
@@ -116,7 +115,7 @@ export const Actions = ({ theme, item, index, menu, setMenu, variant = "row" }: 
                     handleClick(index);
                 }}
             >
-                <Icon name={open ? "close" : "more"} size={variant === "tile" ? 14 : 16} strokeWidth={2.4} />
+                <Icon name={open ? "close" : "more"} size={16} strokeWidth={2.4} />
             </button>
             {open && (
                 <div role="menu" className="menu absolute right-0 top-8 z-40 w-48 p-1.5">
