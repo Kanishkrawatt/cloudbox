@@ -15,6 +15,7 @@ import { useTheme } from "@/utils/contexts/theme";
 import { datatype, imageType } from "@/components/types";
 import { useSearch, filterGroups } from "@/utils/contexts/search";
 import OnlyMeButton, { useOnlyMe } from "@/components/ui/onlyMeFilter";
+import SuggestedAlbums from "@/components/frames/suggestedAlbums";
 
 
 function Image() {
@@ -71,6 +72,13 @@ function Image() {
         <OnlyMeButton active={onlyMe.active} onToggle={onlyMe.toggle} state={onlyMe.state} />
       }
     >
+      {!searchQuery && !loading && user?.uid && (
+        <SuggestedAlbums
+          data={images.flatMap((g) => g.data)}
+          theme={theme}
+          onCreated={() => getImageData(user.uid)}
+        />
+      )}
       {visible.length > 0
         ? visible.map((item, index) => (
           <RecentImages
