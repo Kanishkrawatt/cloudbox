@@ -1,192 +1,45 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
-import { collection, doc, updateDoc, addDoc, getDoc } from "firebase/firestore";
+import React, { useRef, useState } from "react";
+import Link from "next/link";
 import Layout from "@/components/layouts/baseLayout";
 import Icon from "@/components/ui/icons";
-import db from "@/firebase/firestore";
-import { useAuth } from "../utils/contexts/auth";
 import { useTheme } from "../utils/contexts/theme";
-import { TempFilesData } from "./smartshare";
-import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
+import { useUpload } from "@/utils/contexts/upload";
 
-type Folder = { name: string; id: string };
-
-const mb = (bytes: number) => bytes / 1024 ** 2;
 const prettySize = (bytes: number) =>
   bytes <= 0
     ? "0 KB"
     : bytes >= 1024 ** 2
-    ? `${mb(bytes).toFixed(1)} MB`
+    ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
+/** Upload screen. All state lives in UploadProvider so a batch survives navigating away. */
 export function UploadFile() {
   const { theme } = useTheme();
-  const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const [queue, setQueue] = useState<TempFilesData[]>([]);
-  const [names, setNames] = useState<string[]>([]);
-  const [progress, setProgress] = useState<number[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [folderName, setFolderName] = useState<string>("");
   const [showFolders, setShowFolders] = useState(false);
-  const [quota, setQuota] = useState({ used: 0, free: 0, total: 0 });
-
-  const refreshQuota = useCallback(async () => {
-    if (!user?.uid) return;
-    const api = await axios.post("/api/storageInfo", { uid: user.uid });
-    setQuota(api.data);
-  }, [user?.uid]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    axios
-      .post("/api/getFolders", { uid: user.uid })
-      .then((res) => setFolders(res.data?.data ?? []))
-      .catch(() => setFolders([]));
-    refreshQuota();
-  }, [user?.uid, refreshQuota]);
-
-  const kindOf = (file: File) => (file.type.startsWith("image/") ? "Images" : "Files");
-
-  const addFiles = (list: FileList | File[]) => {
-    const incoming = Array.from(list);
-    if (!incoming.length) return;
-    setError(null);
-    setQueue((prev) => [
-      ...prev,
-      ...incoming.map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-        status: "pending",
-      })),
-    ]);
-    setNames((prev) => [
-      ...prev,
-      ...incoming.map((file) => file.name.split(".").slice(0, -1).join(".") || file.name),
-    ]);
-    setProgress((prev) => [...prev, ...incoming.map(() => 0)]);
-  };
-
-  const removeAt = (index: number) => {
-    setQueue((prev) => prev.filter((_, i) => i !== index));
-    setNames((prev) => prev.filter((_, i) => i !== index));
-    setProgress((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const writeMetadata = useCallback(
-    async (
-      file: File,
-      upload: { url: string; publicId: string; resourceType: string },
-      newName: string,
-      folderId: string
-    ) => {
-      // An empty folderId would produce "Folders//Images", not a valid path.
-      const path = folderId
-        ? `User/${user?.uid}/Folders/${folderId}/${kindOf(file)}`
-        : `User/${user?.uid}/${kindOf(file)}`;
-      await addDoc(collection(db, path), {
-        name: newName,
-        size: file.size,
-        location: "Home",
-        type: file.type,
-        url: upload.url,
-        publicId: upload.publicId,
-        resourceType: upload.resourceType,
-        date: new Date().toDateString(),
-      });
-    },
-    [user?.uid]
-  );
-
-  const chargeQuota = useCallback(
-    async (size: number) => {
-      const userDocRef = doc(db, "User", `${user?.uid}`);
-      const snap = await getDoc(userDocRef);
-      const Storage = snap.data()?.Storage;
-      if (!Storage) return;
-      await updateDoc(userDocRef, {
-        Storage: {
-          ...Storage,
-          Used: Storage.Used + mb(size),
-          Free: Storage.Free - mb(size),
-        },
-      });
-    },
-    [user?.uid]
-  );
-
-  const uploadOne = useCallback(
-    async (file: File, newName: string, index: number, folderId: string) => {
-      const idToken = await user?.getIdToken();
-      if (!idToken) throw new Error("Your session expired. Sign in again.");
-      const folder = folderId
-        ? `Folders/${folderId}/${kindOf(file)}`
-        : kindOf(file);
-
-      const upload = await uploadToCloudinary({
-        file,
-        idToken,
-        folder,
-        fileName: newName,
-        onProgress: (pct) =>
-          setProgress((prev) => prev.map((p, i) => (i === index ? pct : p))),
-      });
-
-      await writeMetadata(file, upload, newName, folderId);
-      setProgress((prev) => prev.map((p, i) => (i === index ? 100 : p)));
-      setQueue((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, status: "success" } : item))
-      );
-    },
-    [user, writeMetadata]
-  );
+  const {
+    queue,
+    uploading,
+    reading,
+    error,
+    folders,
+    folderName,
+    quota,
+    setFolderName,
+    addFiles,
+    removeAt,
+    rename,
+    start: upload,
+    clear,
+  } = useUpload();
 
   const pendingSize = queue
     .filter((item) => item.status !== "success")
     .reduce((sum, item) => sum + item.file.size, 0);
-
-  const upload = async () => {
-    if (!queue.length || uploading) return;
-    if (!cloudinaryConfigured()) {
-      setError(
-        "Uploads are not configured yet: set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET."
-      );
-      return;
-    }
-    if (mb(pendingSize) > quota.free) {
-      setError(
-        `Not enough space: need ${mb(pendingSize).toFixed(2)} MB, ${quota.free.toFixed(2)} MB free.`
-      );
-      return;
-    }
-    setError(null);
-    setUploading(true);
-    const folderId = folders.find((f) => f.name === folderName)?.id ?? "";
-
-    // Sequential: chargeQuota is a read-modify-write on one document, so
-    // parallel uploads used to overwrite each other's totals.
-    try {
-      for (let i = 0; i < queue.length; i++) {
-        if (queue[i].status === "success") continue;
-        // Charge only after the bytes actually landed, or a failed upload
-        // (bad rules, no Blaze plan, lost connection) still eats quota.
-        await uploadOne(queue[i].file, names[i], i, folderId);
-        await chargeQuota(queue[i].file.size);
-      }
-      await refreshQuota();
-    } catch (err: any) {
-      setError(err?.message ?? "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const done = queue.length > 0 && queue.every((item) => item.status === "success");
+  const doneCount = queue.filter((item) => item.status === "success").length;
+  const imageCount = queue.filter((item) => item.status === "success" && item.file.type.startsWith("image/")).length;
 
   return (
     <Layout title="Upload">
@@ -294,6 +147,48 @@ export function UploadFile() {
           </button>
         </div>
 
+        {reading > 0 && (
+          <p className="mt-3 text-[12px]" style={{ color: theme.muted }}>
+            Reading text from {reading} image{reading === 1 ? "" : "s"} in the background so you can search
+            by what&apos;s in them. You can browse the app meanwhile; just keep the tab open.
+          </p>
+        )}
+
+        {done && !uploading && (
+          <div
+            className="mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3"
+            role="status"
+            style={{ backgroundColor: theme.secondary, border: `1px solid ${theme.accent}` }}
+          >
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: theme.accent, color: theme.primary }}
+            >
+              <Icon name="check" size={15} strokeWidth={2.4} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium">
+                {doneCount} file{doneCount === 1 ? "" : "s"} uploaded
+                {folderName ? ` to ${folderName}` : ""}
+              </p>
+              <p className="text-[12px]" style={{ color: theme.muted }}>
+                {reading > 0
+                  ? `Still reading text from ${reading} image${reading === 1 ? "" : "s"} for search.`
+                  : "Ready to view."}
+              </p>
+            </div>
+            <Link
+              href={folderName ? `/folder?name=${encodeURIComponent(folderName)}` : imageCount > 0 ? "/images" : "/files"}
+              className="btn h-8 text-[12px]"
+            >
+              View
+            </Link>
+            <button type="button" onClick={clear} className="btn btn-primary h-8 text-[12px]">
+              Upload more
+            </button>
+          </div>
+        )}
+
         {error && (
           <p
             className="mt-3 rounded-lg px-3 py-2 text-[13px]"
@@ -331,10 +226,9 @@ export function UploadFile() {
                 <div className="min-w-0 flex-1">
                   <input
                     type="text"
-                    value={names[index] ?? ""}
-                    onChange={(e) =>
-                      setNames((prev) => prev.map((n, i) => (i === index ? e.target.value : n)))
-                    }
+                    value={item.name}
+                    disabled={item.status !== "pending"}
+                    onChange={(e) => rename(index, e.target.value)}
                     aria-label="File name"
                     className="w-full bg-transparent text-[13px] outline-none"
                   />
@@ -346,7 +240,7 @@ export function UploadFile() {
                       <div
                         className="h-full rounded-full transition-[width]"
                         style={{
-                          width: `${progress[index] ?? 0}%`,
+                          width: `${item.progress}%`,
                           backgroundColor: theme.accent,
                         }}
                       />
@@ -354,8 +248,10 @@ export function UploadFile() {
                     <span className="shrink-0 text-[11px]" style={{ color: theme.muted }}>
                       {item.status === "success"
                         ? "Done"
-                        : progress[index]
-                        ? `${progress[index]}%`
+                        : item.status === "error"
+                        ? "Failed"
+                        : item.progress
+                        ? `${item.progress}%`
                         : prettySize(item.file.size)}
                     </span>
                   </div>

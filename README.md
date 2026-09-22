@@ -80,67 +80,25 @@ picked from the sidebar gear or the profile page and remembered in
 `localStorage`. Palettes live in `utils/contexts/theme.tsx`; add one by
 appending a `preset(...)` entry and it shows up everywhere.
 
-# CloudBox API Documentation
+### Upload-time analysis
 
-It is possible to use the API to create and manage the resources used by the application. The API is available at the following address: `/api`.
-It is RESTful and uses the following HTTP methods:
-`GET` `POST` `PUT` `DELETE`.
+Images are hashed (dHash) and OCR'd with tesseract.js in the browser while they
+upload; `phash`, `text` and `tags` land on the Firestore row. Search matches
+tags and text, the Storage page groups near-duplicates (`utils/imageMeta.ts`,
+Hamming distance ≤ 6), and photos older than this feature simply have no hash.
 
-## Base URL
+### Smart Share extras
 
-`https://cloudbox.kanishkrawatt.tech/api`
+Per-share open/download counts, "ask for more time" from the recipient side,
+one-shot links (`burnAfterDownload`), and guest uploads scoped to the share's
+own Cloudinary folder. Server-side events post to the owner's webhook, signed
+with HMAC-SHA256 when a secret is set.
 
-## Authentication
+### People
 
-Authentication is required for accessing CloudBox API endpoints. You need to include an API key in the header of each request.
+`/people` runs the face service over the whole library and stores clusters on
+the user document; names are carried across re-scans by photo overlap.
 
-API requests must be authenticated using a token that can be obtained from [Here](/profile). The token must be sent in the `Authorization` header of the request.
+## API
 
-```js
-Authorization: Bearer <your_api_key>
-```
-
-## Endpoints
-### 1. **Get Images**
-
-Retrieves a list of images stored in CloudBox.
-
-- **Endpoint**: `/getImages`
-- **Method**: `GET`
-- **Response**:
-  - Status: 200 OK
-  - Content: JSON array of image objects, each containing metadata about the image
-
-### 2. **Get Files**
-
-Retrieves a list of files stored in CloudBox.
-
-- **Endpoint**: `/getFiles`
-- **Method**: `GET`
-- **Response**:
-  - Status: 200 OK
-  - Content: JSON array of file objects, each containing metadata about the file
-
-### 3. **Delete Items**
-
-Deletes a specific item from the storage.
-
-- **Endpoint**: `/deleteItem`
-- **Method**: `DELETE`
-- **Parameters**:
-  - `data: [itemurl]`: Url of the item to be deleted
-- **Response**:
-  - Status: 200 OK
-  - Content: JSON object with a success message
-
-### 4. **Delete Expired Data from Storage**
-
-Deletes expired data from the storage.
-
-- **Endpoint**: `/deleteExpiredData`
-- **Method**: `POST`
-- **Request Body**:
-  - None
-- **Response**:
-  - Status: 200 OK
-  - Content: JSON object with a success message
+See [`docs/api.md`](docs/api.md), also served in-app at `/cloudBoxApi`.

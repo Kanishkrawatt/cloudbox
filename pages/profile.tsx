@@ -8,6 +8,8 @@ import ThemePicker from "@/components/ui/themePicker";
 import Icon from "@/components/ui/icons";
 import FaceScan from "@/components/ui/faceScan";
 import { useFaceProfile } from "@/utils/contexts/faceProfile";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import db from "@/firebase/firestore";
 
 const Section = ({
   title,
@@ -42,6 +44,43 @@ function Profile() {
   const [lockError, setLockError] = React.useState<string | null>(null);
   const [copyState, setCopyState] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
+  const [webhook, setWebhook] = React.useState({ url: "", secret: "" });
+  const [webhookState, setWebhookState] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    getDoc(doc(db, "User", user.uid)).then((snap) => {
+      const stored = snap.data()?.webhook;
+      if (stored?.url) setWebhook({ url: stored.url, secret: stored.secret ?? "" });
+    });
+  }, [user?.uid]);
+
+  const saveWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.uid) return;
+    const url = webhook.url.trim();
+    if (url && !/^https:\/\//.test(url)) return setWebhookState("URL must start with https://");
+    await setDoc(
+      doc(db, "User", user.uid),
+      { webhook: url ? { url, secret: webhook.secret.trim() } : null },
+      { merge: true }
+    );
+    setWebhookState(url ? "Saved" : "Removed");
+    setTimeout(() => setWebhookState(""), 2000);
+  };
+
+  const testWebhook = async () => {
+    const idToken = await user?.getIdToken();
+    setWebhookState("Sending…");
+    const res = await fetch("/api/webhookTest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, url: webhook.url.trim(), secret: webhook.secret.trim() }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setWebhookState(res.ok ? "Test event sent" : body.error ?? "Failed");
+  };
+
   const [userDetails, setUserDetails] = React.useState({
     name: "",
     email: "",
@@ -175,6 +214,55 @@ function Profile() {
               {copyState ? "Copied" : "Copy"}
             </button>
           </div>
+        </Section>
+
+        <Section
+          title="Webhook"
+          description="We POST JSON to this URL when a share is opened, downloaded, extended, added to or expires."
+        >
+          <form onSubmit={saveWebhook} className="flex max-w-lg flex-col gap-3">
+            <input
+              type="url"
+              placeholder="https://example.com/hooks/cloudbox"
+              value={webhook.url}
+              onChange={(e) => setWebhook({ ...webhook, url: e.target.value })}
+              className="field h-9 text-[13px]"
+              style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+              aria-label="Webhook URL"
+            />
+            <input
+              type="text"
+              placeholder="Signing secret (optional)"
+              value={webhook.secret}
+              onChange={(e) => setWebhook({ ...webhook, secret: e.target.value })}
+              className="field h-9 font-mono text-[12px]"
+              style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+              aria-label="Webhook secret"
+              autoComplete="off"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="submit" className="btn btn-primary h-9 text-[13px]">
+                Save webhook
+              </button>
+              <button
+                type="button"
+                className="btn h-9 text-[13px]"
+                disabled={!webhook.url.trim()}
+                onClick={testWebhook}
+              >
+                Send test event
+              </button>
+              {webhookState && (
+                <span className="text-[13px]" style={{ color: theme.muted }}>
+                  {webhookState}
+                </span>
+              )}
+            </div>
+            <p className="text-[12px]" style={{ color: theme.muted }}>
+              With a secret set, each request carries <code>X-Cloudbox-Signature: sha256=&lt;HMAC of the body&gt;</code>.
+              See the API docs for payloads.
+            </p>
+          </form>
         </Section>
 
         <Section title="Appearance" description="Applies to every screen, remembered on this device.">

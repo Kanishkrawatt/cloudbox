@@ -13,6 +13,11 @@ export type SmartShareData = {
   date: string;
   expiresOn: string | null;
   expired: boolean;
+  stats: { opens: number; downloads: number };
+  allowUploads: boolean;
+  burnAfterDownload: boolean;
+  burnedAt: string | null;
+  extendRequested: boolean;
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,7 +28,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const snapshot = await getDocs(collection(db, `User/${uid}/Smartshare`));
   const data: SmartShareData[] = snapshot.docs.map((docSnap) => {
-    const { path, smartLink, time, name, date } = docSnap.data();
+    const { path, smartLink, time, name, date, stats, allowUploads, burnAfterDownload, burnedAt, extendRequested } =
+      docSnap.data();
     const expiresOn = expiryOf(date, time);
     return {
       id: docSnap.id,
@@ -33,6 +39,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       date,
       expiresOn: expiresOn ? expiresOn.toDateString() : null,
       expired: expiresOn ? expiresOn.getTime() < Date.now() : false,
+      stats: { opens: stats?.opens ?? 0, downloads: stats?.downloads ?? 0 },
+      allowUploads: Boolean(allowUploads),
+      burnAfterDownload: Boolean(burnAfterDownload),
+      burnedAt: burnedAt ?? null,
+      extendRequested: Boolean(extendRequested),
     };
   });
 

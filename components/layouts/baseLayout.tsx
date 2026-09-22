@@ -5,6 +5,8 @@ import { useMediaQuery } from "@/utils/contexts/mediaQuery";
 import { useAuth } from "@/utils/contexts/auth";
 import Sidebar from "@/components/ui/sidebar";
 import Topbar from "@/components/ui/topbar";
+import SelectionBar from "@/components/ui/selectionBar";
+import UploadIndicator from "@/components/ui/uploadIndicator";
 
 /**
  * App shell. Everything inside it requires a session: signed-out visitors are
@@ -50,6 +52,8 @@ export default function Layout({
                 <main className={`flex-1 overflow-y-auto ${isMobile ? "pb-24" : "pb-8"}`}>
                     {children}
                 </main>
+                <SelectionBar />
+                <UploadIndicator />
             </div>
         </div>
     );

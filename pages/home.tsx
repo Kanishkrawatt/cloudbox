@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import RecentImages from "@/components/frames/recentImages";
 import RecentFiles from "@/components/frames/recentFiles";
@@ -11,6 +11,7 @@ import { useMediaQuery } from "../utils/contexts/mediaQuery";
 import { useSearch, filterItems } from "@/utils/contexts/search";
 import Layout from "@/components/layouts/baseLayout";
 import Icon from "@/components/ui/icons";
+import Memories from "@/components/frames/memories";
 
 function Home() {
   const { theme } = useTheme();
@@ -41,7 +42,7 @@ function Home() {
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
 
-  const visible = filterItems(searchQuery, data);
+  const visible = useMemo(() => filterItems(searchQuery, data), [searchQuery, data]);
   const firstName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0];
 
   return (
@@ -65,7 +66,8 @@ function Home() {
         </p>
       </div>
 
-        <RecentFiles theme={theme} />
+      {!searchQuery && <Memories data={data} theme={theme} />}
+      <RecentFiles theme={theme} />
       <RecentImages
         data={visible.slice(0, isMobile ? 6 : 12)}
         loadingState={loading}

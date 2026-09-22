@@ -21,7 +21,7 @@ const JOB_THRESHOLD = 4;
 // The face service is slow enough that the default 10s would cut it off.
 export const config = { maxDuration: 60 };
 
-type Stored = {
+export type Stored = {
   people: {
     photos: string[];
     faceCount: number;
@@ -44,7 +44,7 @@ const toOriginal = (url: string, originals: string[]) => {
   return originals.find((original) => tail && original.endsWith(tail.replace(/^w_\d+\//, ""))) ?? url;
 };
 
-const toStored = (
+export const toStored = (
   result: FaceGroupResult,
   originals: string[],
   threshold?: number
@@ -128,6 +128,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await setDoc(shareRef, { faceStatus: "failed" }, { merge: true });
       return res.status(status).json({ error: faceApiError(status, body) });
     }
+    // Stored so the server can finish the job even if this browser goes away.
+    await setDoc(
+      shareRef,
+      { faceJobId: body.jobId, faceAttempts: 1, faceThreshold: threshold ?? null, faceSubmittedAt: new Date().toISOString() },
+      { merge: true }
+    );
     return res.status(202).json({ state: "queued", jobId: body.jobId, images: body.images });
   }
 

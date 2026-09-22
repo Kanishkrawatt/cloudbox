@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { useTheme } from "../utils/contexts/theme";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { datatype, fileType } from "@/components/types";
@@ -46,7 +46,7 @@ function Documents() {
     if (!user?.uid) return;
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
-  const visible = filterGroups(searchQuery, files);
+  const visible = useMemo(() => filterGroups(searchQuery, files), [searchQuery, files]);
 
   return (
     <Layout title="Files">

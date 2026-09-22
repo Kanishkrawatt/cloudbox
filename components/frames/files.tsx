@@ -2,6 +2,7 @@ import { useState } from "react";
 import { datatype, themeType } from "@/components/types";
 import { Actions } from "../actions";
 import Icon, { IconName } from "@/components/ui/icons";
+import { useSelection } from "@/utils/contexts/selection";
 
 const FILE_KINDS: { [kind: string]: readonly string[] } = {
   image: ["png", "jpg", "jpeg", "gif", "svg", "webp"],
@@ -51,6 +52,7 @@ const FileFrame = ({
   size?: "small" | "medium" | "large";
 }) => {
   const [menu, setMenu] = useState<number>(-1);
+  const selection = useSelection();
 
   const header = (
     <div className="mb-2 flex items-baseline gap-2">
@@ -81,10 +83,7 @@ const FileFrame = ({
   return (
     <section className="px-4 py-5 sm:px-6">
       {header}
-      <div
-        className="overflow-hidden rounded-xl"
-        style={{ border: `1px solid ${theme.border}` }}
-      >
+      <div className="rounded-xl" style={{ border: `1px solid ${theme.border}` }}>
         {loadingState
           ? [1, 2, 3].map((item, index) => (
               <div
@@ -100,17 +99,32 @@ const FileFrame = ({
           : data.map((item, index) => (
               <div
                 key={`${item.url}-${index}`}
-                className="group relative flex items-center gap-3 px-3 py-2.5 transition-colors"
+                className={`group relative flex items-center gap-3 px-3 py-2.5 transition-colors ${
+                  index === 0 ? "rounded-t-xl" : ""
+                } ${index === data.length - 1 ? "rounded-b-xl" : ""}`}
                 style={{ borderTop: index ? `1px solid ${theme.border}` : undefined }}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.secondary)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
               >
-                <span
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={selection.has(item.url)}
+                  aria-label={selection.has(item.url) ? `Deselect ${item.name}` : `Select ${item.name}`}
+                  onClick={() => selection.toggle(item)}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: theme.secondary, color: theme.muted }}
+                  style={{
+                    backgroundColor: selection.has(item.url) ? theme.accent : theme.secondary,
+                    color: selection.has(item.url) ? theme.primary : theme.muted,
+                  }}
+                  title="Select"
                 >
-                  <Icon name={KIND_ICON[getFileType(item.name)]} size={16} />
-                </span>
+                  {selection.has(item.url) ? (
+                    <Icon name="check" size={16} strokeWidth={2.5} />
+                  ) : (
+                    <Icon name={KIND_ICON[getFileType(item.name)]} size={16} />
+                  )}
+                </button>
 
                 <button
                   type="button"
