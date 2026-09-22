@@ -1,242 +1,45 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
-import axios from "axios";
-import { collection, doc, updateDoc, addDoc, increment } from "firebase/firestore";
 import Layout from "@/components/layouts/baseLayout";
 import Icon from "@/components/ui/icons";
-import db from "@/firebase/firestore";
-import { useAuth } from "../utils/contexts/auth";
 import { useTheme } from "../utils/contexts/theme";
-import { TempFilesData } from "./smartshare";
-import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
-import { computePhash, extractText } from "@/utils/imageMetaBrowser";
-import { tagsFor } from "@/utils/imageMeta";
+import { useUpload } from "@/utils/contexts/upload";
 
-type Folder = { name: string; id: string };
-
-/** Parallel uploads; Cloudinary handles many, the browser's connection pool is the real cap. */
-const CONCURRENCY = 3;
-
-/** Runs `fn` over `items` with at most `limit` in flight. */
-const pool = async <T,>(items: T[], limit: number, fn: (item: T) => Promise<void>) => {
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) await fn(items[next++]);
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-};
-
-const mb = (bytes: number) => bytes / 1024 ** 2;
 const prettySize = (bytes: number) =>
   bytes <= 0
     ? "0 KB"
     : bytes >= 1024 ** 2
-    ? `${mb(bytes).toFixed(1)} MB`
+    ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
+/** Upload screen. All state lives in UploadProvider so a batch survives navigating away. */
 export function UploadFile() {
   const { theme } = useTheme();
-  const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const [queue, setQueue] = useState<TempFilesData[]>([]);
-  const [names, setNames] = useState<string[]>([]);
-  const [progress, setProgress] = useState<number[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [folderName, setFolderName] = useState<string>("");
   const [showFolders, setShowFolders] = useState(false);
-  const [quota, setQuota] = useState({ used: 0, free: 0, total: 0 });
-
-  const refreshQuota = useCallback(async () => {
-    if (!user?.uid) return;
-    const api = await axios.post("/api/storageInfo", { uid: user.uid });
-    setQuota(api.data);
-  }, [user?.uid]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    axios
-      .post("/api/getFolders", { uid: user.uid })
-      .then((res) => setFolders(res.data?.data ?? []))
-      .catch(() => setFolders([]));
-    refreshQuota();
-  }, [user?.uid, refreshQuota]);
-
-  const kindOf = (file: File) => (file.type.startsWith("image/") ? "Images" : "Files");
-
-  const addFiles = (list: FileList | File[]) => {
-    const incoming = Array.from(list);
-    if (!incoming.length) return;
-    setError(null);
-    setQueue((prev) => [
-      ...prev,
-      ...incoming.map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-        status: "pending",
-      })),
-    ]);
-    setNames((prev) => [
-      ...prev,
-      ...incoming.map((file) => file.name.split(".").slice(0, -1).join(".") || file.name),
-    ]);
-    setProgress((prev) => [...prev, ...incoming.map(() => 0)]);
-  };
-
-  const removeAt = (index: number) => {
-    setQueue((prev) => prev.filter((_, i) => i !== index));
-    setNames((prev) => prev.filter((_, i) => i !== index));
-    setProgress((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const writeMetadata = useCallback(
-    async (
-      file: File,
-      upload: { url: string; publicId: string; resourceType: string },
-      newName: string,
-      folderId: string,
-      phash?: string
-    ) => {
-      // An empty folderId would produce "Folders//Images", not a valid path.
-      const path = folderId
-        ? `User/${user?.uid}/Folders/${folderId}/${kindOf(file)}`
-        : `User/${user?.uid}/${kindOf(file)}`;
-      return addDoc(collection(db, path), {
-        name: newName,
-        size: file.size,
-        location: "Home",
-        type: file.type,
-        url: upload.url,
-        publicId: upload.publicId,
-        resourceType: upload.resourceType,
-        date: new Date().toDateString(),
-        tags: tagsFor({ type: file.type, folder: folderName || undefined }),
-        // Firestore rejects undefined, so only set what we have.
-        ...(phash ? { phash } : {}),
-      });
-    },
-    [user?.uid, folderName]
-  );
-
-  // OCR runs after the row exists and patches text/tags in when it finishes,
-  // so a slow read never holds up the upload. One at a time: tesseract is
-  // CPU-bound and several workers just fight each other.
-  const [reading, setReading] = useState(0);
-  const ocrQueue = useRef(Promise.resolve());
-  const readTextLater = useCallback(
-    (file: File, ref: { path: string }) => {
-      setReading((n) => n + 1);
-      ocrQueue.current = ocrQueue.current
-        .then(async () => {
-          const text = await extractText(file).catch(() => undefined);
-          if (!text) return;
-          await updateDoc(doc(db, ref.path), {
-            text,
-            tags: tagsFor({ type: file.type, folder: folderName || undefined, text }),
-          });
-        })
-        .catch(() => undefined)
-        .finally(() => setReading((n) => n - 1));
-    },
-    [folderName]
-  );
-
-  // Atomic increments, so parallel uploads cannot overwrite each other's totals.
-  const chargeQuota = useCallback(
-    (size: number) =>
-      updateDoc(doc(db, "User", `${user?.uid}`), {
-        "Storage.Used": increment(mb(size)),
-        "Storage.Free": increment(-mb(size)),
-      }),
-    [user?.uid]
-  );
-
-  const uploadOne = useCallback(
-    async (file: File, newName: string, index: number, folderId: string) => {
-      const idToken = await user?.getIdToken();
-      if (!idToken) throw new Error("Your session expired. Sign in again.");
-      const folder = folderId
-        ? `Folders/${folderId}/${kindOf(file)}`
-        : kindOf(file);
-
-      // The hash takes milliseconds; compute it while the bytes are in flight.
-      const isImage = file.type.startsWith("image/");
-      const phashPromise = isImage ? computePhash(file).catch(() => undefined) : Promise.resolve(undefined);
-
-      const upload = await uploadToCloudinary({
-        file,
-        idToken,
-        folder,
-        fileName: newName,
-        onProgress: (pct) =>
-          setProgress((prev) => prev.map((p, i) => (i === index ? pct : p))),
-      });
-
-      const ref = await writeMetadata(file, upload, newName, folderId, await phashPromise);
-      await chargeQuota(file.size);
-      setProgress((prev) => prev.map((p, i) => (i === index ? 100 : p)));
-      setQueue((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, status: "success" } : item))
-      );
-      if (isImage) readTextLater(file, ref);
-    },
-    [user, writeMetadata, chargeQuota, readTextLater]
-  );
+  const {
+    queue,
+    uploading,
+    reading,
+    error,
+    folders,
+    folderName,
+    quota,
+    setFolderName,
+    addFiles,
+    removeAt,
+    rename,
+    start: upload,
+    clear,
+  } = useUpload();
 
   const pendingSize = queue
     .filter((item) => item.status !== "success")
     .reduce((sum, item) => sum + item.file.size, 0);
-
-  const upload = async () => {
-    if (!queue.length || uploading) return;
-    if (!cloudinaryConfigured()) {
-      setError(
-        "Uploads are not configured yet: set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET."
-      );
-      return;
-    }
-    if (mb(pendingSize) > quota.free) {
-      setError(
-        `Not enough space: need ${mb(pendingSize).toFixed(2)} MB, ${quota.free.toFixed(2)} MB free.`
-      );
-      return;
-    }
-    setError(null);
-    setUploading(true);
-    const folderId = folders.find((f) => f.name === folderName)?.id ?? "";
-
-    const pending = queue.map((item, i) => i).filter((i) => queue[i].status !== "success");
-    const failures: string[] = [];
-    // Quota is charged per file only after its bytes landed, so a failed
-    // upload never eats space.
-    await pool(pending, CONCURRENCY, async (i) => {
-      try {
-        await uploadOne(queue[i].file, names[i], i, folderId);
-      } catch (err: any) {
-        failures.push(`${names[i]}: ${err?.message ?? "failed"}`);
-        setQueue((prev) => prev.map((item, k) => (k === i ? { ...item, status: "error" } : item)));
-      }
-    });
-    if (failures.length) setError(failures.join(" · "));
-    await refreshQuota();
-    setUploading(false);
-  };
-
   const done = queue.length > 0 && queue.every((item) => item.status === "success");
   const doneCount = queue.filter((item) => item.status === "success").length;
   const imageCount = queue.filter((item) => item.status === "success" && item.file.type.startsWith("image/")).length;
-
-  const clear = () => {
-    queue.forEach((item) => URL.revokeObjectURL(item.url));
-    setQueue([]);
-    setNames([]);
-    setProgress([]);
-    setError(null);
-  };
 
   return (
     <Layout title="Upload">
@@ -347,7 +150,7 @@ export function UploadFile() {
         {reading > 0 && (
           <p className="mt-3 text-[12px]" style={{ color: theme.muted }}>
             Reading text from {reading} image{reading === 1 ? "" : "s"} in the background so you can search
-            by what&apos;s in them. Keep this tab open until it finishes.
+            by what&apos;s in them. You can browse the app meanwhile; just keep the tab open.
           </p>
         )}
 
@@ -423,10 +226,9 @@ export function UploadFile() {
                 <div className="min-w-0 flex-1">
                   <input
                     type="text"
-                    value={names[index] ?? ""}
-                    onChange={(e) =>
-                      setNames((prev) => prev.map((n, i) => (i === index ? e.target.value : n)))
-                    }
+                    value={item.name}
+                    disabled={item.status !== "pending"}
+                    onChange={(e) => rename(index, e.target.value)}
                     aria-label="File name"
                     className="w-full bg-transparent text-[13px] outline-none"
                   />
@@ -438,7 +240,7 @@ export function UploadFile() {
                       <div
                         className="h-full rounded-full transition-[width]"
                         style={{
-                          width: `${progress[index] ?? 0}%`,
+                          width: `${item.progress}%`,
                           backgroundColor: theme.accent,
                         }}
                       />
@@ -448,8 +250,8 @@ export function UploadFile() {
                         ? "Done"
                         : item.status === "error"
                         ? "Failed"
-                        : progress[index]
-                        ? `${progress[index]}%`
+                        : item.progress
+                        ? `${item.progress}%`
                         : prettySize(item.file.size)}
                     </span>
                   </div>
