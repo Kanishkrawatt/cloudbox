@@ -1,31 +1,25 @@
-/* eslint-disable @next/next/no-img-element */
-/* eslint-disable jsx-a11y/alt-text */
-// eslint-disable-next-line @next/next/no-img-element
-
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import RecentImages from "@/components/frames/recentImages";
 import RecentFiles from "@/components/frames/recentFiles";
 import { datatype } from "@/components/types";
 import { useAuth } from "../utils/contexts/auth";
-import {
-  collection,
-  getDocs,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import db from "@/firebase/firestore";
 import { useTheme } from "../utils/contexts/theme";
 import { useMediaQuery } from "../utils/contexts/mediaQuery";
+import { useSearch, filterItems } from "@/utils/contexts/search";
 import Layout from "@/components/layouts/baseLayout";
+import Icon from "@/components/ui/icons";
 
 function Home() {
-  const { theme,sidebar } = useTheme();
-  theme.sidebar = sidebar;
+  const { theme } = useTheme();
   const [data, setData] = useState<datatype[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { user } = useAuth();
   const { isMobile } = useMediaQuery();
+  const { query: searchQuery } = useSearch();
+
   const getImageData = useCallback(async (id: string) => {
     const collectionRef = collection(db, `User/${id}/Images`);
     const Ref = query(
@@ -47,27 +41,39 @@ function Home() {
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
 
-  return (
-    <Layout>
-      <div className="flex flex-wrap justify-evenly p-2">
-        <RecentImages
-          data={data.slice(0, isMobile ? 2 : 4)}
-          loadingState={loading}
-          size="large"
-          theme={theme}
-          title="Recent Images"
-        />
-        <RecentFiles theme={theme} />
-        <RecentImages
-          data={data.slice(isMobile ? 2 : 4, isMobile ? 6 : 10)}
-          theme={theme}
-          size="small"
-          loadingState={loading}
-          title="Images"
-        />
-      </div>
-    </Layout>
+  const visible = filterItems(searchQuery, data);
+  const firstName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0];
 
+  return (
+    <Layout
+      title="Home"
+      action={
+        <Link href="/uploadFile" className="btn btn-primary hidden h-9 text-[13px] sm:inline-flex">
+          <Icon name="upload" size={15} />
+          Upload
+        </Link>
+      }
+    >
+      <div className="px-4 pb-1 pt-6 sm:px-6">
+        <h2 className="text-[1.25rem] font-semibold tracking-tight">
+          {firstName ? `Welcome back, ${firstName}` : "Welcome back"}
+        </h2>
+        <p className="mt-1 text-[13px]" style={{ color: theme.muted }}>
+          {searchQuery
+            ? `Showing matches for “${searchQuery}”`
+            : "Your latest uploads and folders."}
+        </p>
+      </div>
+
+        <RecentFiles theme={theme} />
+      <RecentImages
+        data={visible.slice(0, isMobile ? 6 : 12)}
+        loadingState={loading}
+        size="medium"
+        theme={theme}
+          title="Recent images"
+        />
+    </Layout>
   );
 }
 

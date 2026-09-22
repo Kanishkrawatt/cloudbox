@@ -5,12 +5,13 @@ import { datatype } from "@/components/types";
 import { useRouter } from "next/router";
 import Layout from "@/components/layouts/baseLayout";
 import { useAuth } from "@/utils/contexts/auth";
-import axios from "axios";
+import { useSearch, filterItems } from "@/utils/contexts/search";
 
 function Folder() {
     const { theme } = useTheme();
     const { user } = useAuth();
     const router = useRouter();
+    const { query: searchQuery } = useSearch();
 
     const { name } = router.query;
     const [loading, setLoading] = useState<boolean>(true);
@@ -35,9 +36,9 @@ function Folder() {
     }, [getData, user?.uid]);
 
     return (
-        <Layout>
+        <Layout title={(name as string) ?? "Folder"}>
             <RecentImages
-                data={images}
+                data={filterItems(searchQuery, images)}
                 loadingState={loading}
                 size={"large"}
                 theme={theme}

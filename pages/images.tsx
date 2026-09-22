@@ -13,6 +13,8 @@ import {
 import { useAuth } from "@/utils/contexts/auth";
 import { useTheme } from "@/utils/contexts/theme";
 import { datatype, imageType } from "@/components/types";
+import { useSearch, filterGroups } from "@/utils/contexts/search";
+import OnlyMeButton, { useOnlyMe } from "@/components/ui/onlyMeFilter";
 
 
 function Image() {
@@ -20,6 +22,8 @@ function Image() {
   const { theme } = useTheme();
   const [images, setImages] = useState<imageType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const { query: searchQuery } = useSearch();
+  const onlyMe = useOnlyMe();
 
   const getImageData = useCallback(async (id: string) => {
     const collectionRef = collection(db, `User/${id}/Images`);
@@ -56,10 +60,19 @@ function Image() {
     if (!user?.uid) return;
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
+  const visible = filterGroups(searchQuery, images)
+    .map((group) => ({ ...group, data: onlyMe.filter(group.data) }))
+    .filter((group) => group.data.length > 0);
+
   return (
-    <Layout>
-      {images.length > 0
-        ? images.map((item, index) => (
+    <Layout
+      title="Images"
+      action={
+        <OnlyMeButton active={onlyMe.active} onToggle={onlyMe.toggle} state={onlyMe.state} />
+      }
+    >
+      {visible.length > 0
+        ? visible.map((item, index) => (
           <RecentImages
             key={index}
             data={item.data}
@@ -68,9 +81,7 @@ function Image() {
             title={item.date}
           />
         ))
-        : [1, 2, 3].map((item, index) => (
-          <RecentImages key={index} loadingState={true} theme={theme} />
-        ))}
+        : <RecentImages loadingState={loading} theme={theme} title="Images" />}
     </Layout>
 
   );

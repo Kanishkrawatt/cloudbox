@@ -1,14 +1,13 @@
-/* eslint-disable @next/next/no-img-element */
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useTheme } from "../utils/contexts/theme";
-import Image from "next/image";
-import storage from "@/firebase/storage";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { useAuth } from "../utils/contexts/auth";
-import db from "@/firebase/firestore";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { addDoc, collection, setDoc, doc } from "firebase/firestore";
 import Layout from "@/components/layouts/baseLayout";
-import { themeType } from "@/components/types";
+import Icon from "@/components/ui/icons";
+import db from "@/firebase/firestore";
+import { useAuth } from "../utils/contexts/auth";
+import { useTheme } from "../utils/contexts/theme";
+import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
+import { sharePath, absoluteShareUrl } from "@/utils/shareLink";
+import FaceSortToggle, { useFaceSort, THRESHOLDS } from "@/components/ui/faceSort";
 
 export interface TempFilesData {
   file: File;
@@ -16,588 +15,399 @@ export interface TempFilesData {
   status?: string;
 }
 
+const EXPIRY = [
+  { label: "1 day", days: 1 },
+  { label: "2 days", days: 2 },
+  { label: "5 days", days: 5 },
+  { label: "1 week", days: 7 },
+];
+
+type ShareLink = {
+  id: string;
+  path: string;
+  time: number;
+  name: string;
+  date: string;
+  expiresOn: string | null;
+  expired: boolean;
+};
+
 function Smartshare() {
   const { theme } = useTheme();
-  const [dropDown, setDropDown] = useState<string>("off");
-  const [files, setFiles] = useState<File[]>([]); // Store multiple files
-  const [urls, setUrls] = useState<TempFilesData[]>([]);
   const { user } = useAuth();
-  const randomId = Math.random().toString(36).substring(7);
-  const [smartId, setSmartId] = useState<string>("");
-  const [copyState, setCopyState] = useState(false);
-  const [modalState, setModalState] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(smartId);
-    setCopyState(true);
-    setTimeout(() => {
-      setCopyState(false);
-    }, 3000);
-  };
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [days, setDays] = useState<number | null>(null);
+  const [showExpiry, setShowExpiry] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [newPath, setNewPath] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [links, setLinks] = useState<ShareLink[]>([]);
+  const [copiedIndex, setCopiedIndex] = useState(-1);
+  const [loadingLinks, setLoadingLinks] = useState(true);
+  const [sortByFace, setSortByFace] = useState(false);
+  const faceSort = useFaceSort();
+  const [faceThreshold, setFaceThreshold] = useState(THRESHOLDS[1].value);
 
-  const uploadFileToFirestore = async (downloadURL: string, SmartName: string) => {
+  // Read on the client only: the host is not known while rendering on the server.
+  useEffect(() => setOrigin(window.location.origin), []);
+
+  useEffect(() => {
+    const urls = files.map((file) => URL.createObjectURL(file));
+    setPreviews(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [files]);
+
+  const loadLinks = useCallback(async () => {
+    if (!user?.uid) return;
+    const res = await fetch("/api/getSmartShareLinks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: user.uid }),
+    });
+    const json = await res.json();
+    setLinks(json.data ?? []);
+    setLoadingLinks(false);
+  }, [user?.uid]);
+
+  useEffect(() => {
+    loadLinks();
+  }, [loadLinks]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const shareName = nameRef.current?.value.trim();
+    if (!files.length) return setError("Pick at least one file to share.");
+    if (!shareName) return setError("Give this share a name.");
+    if (!days) return setError("Choose how long the link should live.");
+    if (!cloudinaryConfigured()) {
+      return setError(
+        "Uploads are not configured yet: set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET."
+      );
+    }
+
+    setError(null);
+    setBusy(true);
+    setProgress(0);
+    setNewPath("");
+
+    // One id for the whole share; it used to be regenerated on every render.
+    const id = Math.random().toString(36).substring(2, 9);
+    const path = sharePath(id, `${user?.uid}`);
+
     try {
-      const id = randomId;
+      const idToken = await user?.getIdToken();
+      if (!idToken) throw new Error("Your session expired. Sign in again.");
+
       await setDoc(doc(db, `User/${user?.uid}/Smartshare/${id}`), {
-        name: SmartName,
-        time:
-          dropDown.split(" ")[1] !== "week"
-            ? parseInt(dropDown.split(" ")[0])
-            : parseInt(dropDown.split(" ")[0]) * 7,
+        name: shareName,
+        time: days,
         date: new Date().toDateString(),
-        smartLink: `https://cloudbox.kanishkrawatt.tech/smartshow?id=${id}-${user?.uid}`,
-      });
-      await addDoc(collection(db, `User/${user?.uid}/Smartshare/${randomId}/files`), {
-        name: files[0]?.name,
-        size: files[0]?.size,
-        type: files[0]?.type,
-        url: downloadURL,
+        // Path only: an absolute URL here would pin the share to whatever host
+        // happened to create it.
+        path,
+        sortByFace,
+        // Recipients see a banner while this is not "done".
+        faceStatus: sortByFace ? "running" : null,
       });
 
-      setFiles([]); // Clear files after upload
-      setSmartId(`${window.location.host}/smartshow?id=${id}-${user?.uid}`);
-    } catch (error: any) {
-      // console.error(error.message);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const upload = await uploadToCloudinary({
+          file,
+          idToken,
+          folder: `Smartshare/${id}`,
+          fileName: file.name.split(".").slice(0, -1).join(".") || file.name,
+          onProgress: (pct) =>
+            setProgress(Math.round(((i + pct / 100) / files.length) * 100)),
+        });
+        // Each upload records its own file; this used to always write files[0].
+        await addDoc(collection(db, `User/${user?.uid}/Smartshare/${id}/files`), {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: upload.url,
+          publicId: upload.publicId,
+          resourceType: upload.resourceType,
+        });
+      }
+
+      setNewPath(path);
+      if (sortByFace) faceSort.run(id, faceThreshold);
+      setFiles([]);
+      if (nameRef.current) nameRef.current.value = "";
+      setDays(null);
+      await loadLinks();
+    } catch (err: any) {
+      setError(err?.message ?? "Could not create the share.");
+    } finally {
+      setBusy(false);
+      setProgress(0);
     }
   };
 
-  const uploadFileToStorage = async (SmartName: string, name: string, file: File) => {
-    const storageRef = ref(
-      storage,
-      `smartshare/${user?.uid}/${SmartName}/${name}-${new Date()
-        .toDateString()
-        .split(" ")
-        .join("-")}}`
-    );
-    const uploadTask = uploadBytesResumable(storageRef, file);
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        // Handle progress if needed
-      },
-      (error) => {
-        // console.error(error.message);
-      },
-      async () => {
-        try {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await uploadFileToFirestore(downloadURL, SmartName);
-        } catch (error: any) {
-          // console.error(error.message);
-        }
-      }
-    );
-  };
-
-  const name = useRef<HTMLInputElement>(null);
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (files.length === 0) return;
-    if (!name.current?.value) return alert("Please enter a name");
-    if (dropDown === "off" || dropDown === "on")
-      return alert("Please select a time");
-    setModalState(true);
-    files.forEach((file) => {
-      uploadFileToStorage(name.current!.value, file.name, file);
+  const removeShare = async (shareId: string) => {
+    const idToken = await user?.getIdToken();
+    await fetch("/api/deleteSmartShare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, shareId }),
     });
-    setFiles([]);
+    await loadLinks();
   };
 
-  useEffect(() => {
-    if (files.length === 0) return;
-    const fileUrls = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
-    setUrls((prevUrls) => [...prevUrls, ...fileUrls]);
-    return () => {
-      fileUrls.forEach(({ url }) => URL.revokeObjectURL(url));
-    };
-  }, [files]);
+  const copy = (text: string, index = -1) => {
+    navigator.clipboard.writeText(text);
+    if (index >= 0) {
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(-1), 2500);
+    } else {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
   return (
-    <Layout>
-      <div className="flex flex-wrap p-2 justify-start gap-[2rem]"
-        style={{
-          color: theme.text,
-        }}
-      >
-        <div className="w-full max-h-[55vh] overflow-auto gap-9 flex flex-row">
-          <div className="px-[2vw] w-1/2">
-            <h1 className="text-2xl mb-4">Smart Share</h1>
-            <div className="flex items-center w-full">
-              <UploadImage setFiles={setFiles} />
-            </div>
-            <form onSubmit={submit}>
-              <div className="flex h-[45px]">
-                <label
-                  htmlFor="search-dropdown"
-                  className="mb-2 text-sm font-medium sr-only "
-                ></label>
-                <button
-                  className="flex-shrink-0 z-10 inline-flex items-center py-2.5 px-4 text-sm font-medium text-center text-gray-900 bg-gray-100 border-[2px] border-dashed border-gray-300 rounded-l-lg"
-                  type="button"
-                  onClick={() =>
-                    setDropDown(dropDown === "off" ? "on" : "off")
-                  }
+    <Layout title="Smart Share">
+      <div className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-2">
+        <section>
+          <h2 className="section-label mb-3">New share</h2>
+
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
+            }}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+            className="flex cursor-pointer flex-col items-center gap-2 rounded-xl px-6 py-10 text-center"
+            style={{
+              border: `1px dashed ${dragging ? theme.accent : theme.border}`,
+              backgroundColor: dragging ? theme.secondary : "transparent",
+              color: theme.muted,
+            }}
+          >
+            <Icon name="share" size={20} />
+            <p className="text-[13px]" style={{ color: theme.text }}>
+              Drop files here, or click to browse
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                // Copy the FileList out now: the state updater runs later, and
+                // by then `value = ""` has already emptied e.target.files, so
+                // picking files through the dialog added nothing.
+                const picked = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                setFiles((prev) => [...prev, ...picked]);
+              }}
+            />
+          </div>
+
+          {previews.length > 0 && (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {previews.map((url, i) => (
+                <span
+                  key={url}
+                  className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                  style={{ border: `1px solid ${theme.border}`, color: theme.muted }}
                 >
-                  {dropDown === "on"
-                    ? "Time"
-                    : dropDown === "off"
-                      ? "Time"
-                      : dropDown}
-                  <svg
-                    aria-hidden="true"
-                    className="w-4 h-4 ml-1"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                    xmlns="http://www.w3.org/2000/svg"
+                  {files[i]?.type.startsWith("image/") ? (
+                    // Plain <img>: next/image cannot load blob: object URLs,
+                    // which is what a locally picked file gives us.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <Icon name="file" size={18} />
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Remove"
+                    onClick={() => setFiles((prev) => prev.filter((_, k) => k !== i))}
+                    className="absolute right-1 top-1 rounded p-0.5"
+                    style={{ backgroundColor: theme.primary, color: theme.muted }}
                   >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                    <Icon name="close" size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
+            <input
+              ref={nameRef}
+              type="text"
+              placeholder="Share name"
+              className="field h-10 text-[13px]"
+              style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+            />
+
+            <FaceSortToggle
+              enabled={sortByFace}
+              onToggle={() => setSortByFace((v) => !v)}
+              state={faceSort.state}
+              message={faceSort.message}
+              threshold={faceThreshold}
+              onThreshold={setFaceThreshold}
+            />
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  className="btn h-9 text-[13px]"
+                  onClick={() => setShowExpiry((v) => !v)}
+                  aria-expanded={showExpiry}
+                >
+                  {days ? `Expires in ${days} day${days > 1 ? "s" : ""}` : "Set expiry"}
+                  <Icon name="chevronDown" size={14} />
                 </button>
-                {dropDown === "on" && (
-                  <div className="z-10 bg-white divide-y translate-y-[3rem] absolute divide-gray-100 rounded-lg shadow w-44 dark:bg-gray-700">
-                    <ul
-                      className="py-2 text-sm text-gray-700 dark:text-gray-200"
-                      aria-labelledby="dropdown-button"
-                    >
-                      <li
+                {showExpiry && (
+                  <div className="menu absolute left-0 top-11 z-40 w-44 p-1.5">
+                    {EXPIRY.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        className="menu-item text-[13px]"
                         onClick={() => {
-                          setDropDown("1 day");
+                          setDays(option.days);
+                          setShowExpiry(false);
                         }}
-                        className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
                       >
-                        <a>1 days</a>
-                      </li>
-                      <li
-                        onClick={() => {
-                          setDropDown("2 day");
-                        }}
-                        className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-                      >
-                        2 days
-                      </li>
-                      <li
-                        onClick={() => {
-                          setDropDown("5 day");
-                        }}
-                        className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-                      >
-                        5 days
-                      </li>
-                      <li
-                        onClick={() => {
-                          setDropDown("1 week");
-                        }}
-                        className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-                      >
-                        1 week
-                      </li>
-                    </ul>
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 )}
-                <div className="relative w-full h-full">
-                  <input
-                    type="search"
-                    id="search-dropdown"
-                    className="block p-2.5 h-full w-full z-20 text-sm text-gray-900 bg-gray-50 rounded-r-lg border-l-gray-100 border-dashed border-l-2 border-[2px] border-gray-300 focus:outline-none"
-                    placeholder="Title"
-                    autoComplete="off"
-                    ref={name}
-                  />
+              </div>
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn btn-primary ml-auto h-9 text-[13px]"
+              >
+                {busy ? `Uploading ${progress}%` : "Create link"}
+              </button>
+            </div>
+
+            {error && (
+              <p
+                className="rounded-lg px-3 py-2 text-[13px]"
+                role="alert"
+                style={{ backgroundColor: theme.secondary, color: "#e5484d" }}
+              >
+                {error}
+              </p>
+            )}
+          </form>
+
+          {newPath && (
+            <div
+              className="mt-4 flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ border: `1px solid ${theme.border}` }}
+            >
+              <Icon name="link" size={15} />
+              <span className="min-w-0 flex-1 truncate text-[12px]">
+                {absoluteShareUrl(newPath, origin)}
+              </span>
+              <a
+                href={newPath}
+                target="_blank"
+                rel="noreferrer"
+                className="btn h-7 px-2 text-[12px]"
+              >
+                Open
+              </a>
+              <button
+                type="button"
+                className="btn h-7 px-2 text-[12px]"
+                onClick={() => copy(absoluteShareUrl(newPath, origin))}
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2 className="section-label mb-3">Previous links</h2>
+          {loadingLinks ? (
+            <div className="skeleton h-24 rounded-xl" />
+          ) : links.length === 0 ? (
+            <div
+              className="flex flex-col items-center gap-2 rounded-xl px-6 py-10 text-center"
+              style={{ border: `1px dashed ${theme.border}`, color: theme.muted }}
+            >
+              <Icon name="link" size={20} />
+              <p className="text-[13px]">No share links yet.</p>
+            </div>
+          ) : (
+            <div
+              className="overflow-hidden rounded-xl"
+              style={{ border: `1px solid ${theme.border}` }}
+            >
+              {links.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 px-3 py-2.5"
+                  style={{ borderTop: index ? `1px solid ${theme.border}` : undefined }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px]">
+                      {item.name || "Untitled share"}
+                      {item.expired && (
+                        <span className="ml-2 text-[11px]" style={{ color: "#e5484d" }}>
+                          expired
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-[12px]" style={{ color: theme.muted }}>
+                      {item.expiresOn ? `Expires ${item.expiresOn}` : "No expiry set"}
+                    </p>
+                  </div>
                   <button
-                    type="submit"
-                    className="absolute top-1 right-1 p-[1rem] h-[85%] text-sm font-medium text-white bg-gray-50"
+                    type="button"
+                    className="btn h-7 shrink-0 px-2 text-[12px]"
+                    onClick={() => copy(absoluteShareUrl(item.path, origin), index)}
                   >
-                    <Image src={"enter.svg"} alt="img" fill />
+                    {copiedIndex === index ? "Copied" : "Copy"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete share"
+                    className="shrink-0 rounded-md p-1.5"
+                    style={{ color: theme.muted }}
+                    onClick={() => removeShare(item.id)}
+                  >
+                    <Icon name="trash" size={15} />
                   </button>
                 </div>
-              </div>
-            </form>
-          </div>
-          <SmartShareLink />
-        </div>
-        <Preview urls={urls} theme={theme} />
-      </div>
-      {modalState && (
-        <div
-          className="absolute top-[50%] left-[50%] transform translate-x-[-50%] translate-y-[-50%] h-[30vh] w-[30vw] rounded-xl"
-          style={{
-            backgroundColor: theme.primary,
-            color: theme.text,
-            border: `2px dashed ${theme.text}`,
-          }}
-        >
-          <div className="flex flex-col h-full gap-4 items-center justify-between ">
-            <h1 className="text-2xl mt-5 text-center">SmartLink</h1>
-            <div className="flex flex-col w-full justify-between gap-4 px-6">
-              <h4 className="text-l"
-                style={{
-                  color: theme.text,
-                }}
-              >General Access</h4>
-              <div className="flex flex-row w-full items-center h-[5vh] my-2">
-                <img src="/web.png" alt="logo" className="h-full w-auto" />
-                <div className="flex flex-col m-2 ml-5 w-[70%] h-full">
-                  <select className="block py-1.5 px-0 w-[60%] text-sm border-none bg-transparent focus:outline-none"
-                    style={{
-                      color: theme.text,
-                    }}
-                  >
-                    <option
-                      value="any"
-                      style={{
-                        backgroundColor: theme.secondary,
-                        color: theme.text,
-                      }}
-                    >
-                      Anyone with the link
-                    </option>
-                    <option
-                      value="any"
-                      style={{
-                        color: theme.text,
-                      }}
-                    >
-                      None
-                    </option>
-                  </select>
-                  <p className="px-1 text-sm"
-                    style={{
-                      color: theme.secondaryText
-                    }}
-                  >
-                    Anyone on the Internet with the link can edit
-                  </p>
-                </div>
-                <select className="block h-[80%] px-0 w-[20%] text-sm border border-gray-500 rounded-md py-3 bg-transparent focus:outline-none"
-                  style={{
-                    color: theme.text,
-                  }}>
-                  <option
-                    value="any"
-                  >
-                    Editor
-                  </option>
-                </select>
-              </div>
+              ))}
             </div>
-            {smartId ? (
-              <div className="flex flex-row w-full items-center justify-between gap-4 p-6">
-                <button
-                  className="font-medium rounded-xl text-sm flex flex-row justify-center items-center px-3 py-2 mr-2 mb-2"
-                  style={{
-                    border: `1px solid ${theme.accent}`,
-                    color: theme.text,
-                  }}
-                  onClick={() => {
-                    handleCopy();
-                  }}
-                >
-                  <Image
-                    src={"copy.svg"}
-                    alt="copy"
-                    height={18}
-                    width={18}
-                    style={{
-                      filter: theme.invertImage ? "invert(1)" : "invert(0)",
-                      marginRight: "0.5rem",
-                    }}
-                  />
-                  {copyState ? "Copied" : "Copy "}
-                </button>
-
-                <button
-                  className="font-medium rounded-3xl text-sm px-4 py-2 mr-2 mb-2 "
-                  style={{
-                    backgroundColor: theme.accent,
-                    color: theme.secondaryText,
-                  }}
-                  onClick={() => {
-                    setModalState(false);
-                  }}
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <div className="flex justify-center items-center h-[40%]">
-                <svg
-                  aria-hidden="true"
-                  className="w-8 h-8 mr-2 text-gray-200 animate-spin  fill-blue-600"
-                  viewBox="0 0 100 101"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
-                    fill="currentFill"
-                  />
-                </svg>
-                <span className="sr-only">Loading...</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          )}
+        </section>
+      </div>
     </Layout>
   );
 }
 
 export default Smartshare;
-
-export const Preview = ({ urls, theme }: {
-  urls: TempFilesData[], theme: themeType
-
-}) => {
-  return (
-    <div className="px-[2vw] max-w-[80vw] w-full h-[34vh]">
-      <h1 className="text-2xl mb-4"
-        style={{
-          color: theme.text,
-        }}
-      >Preview</h1>
-      <div className="flex h-[30vh] gap-3  overflow-y-hidden overflow-x-auto ">
-        {urls && urls.length > 0
-          ? urls.map((url, k) => (
-            <div
-              key={k}
-              className="flex flex-col items-center justify-center min-w-[30vw] h-[28vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 mb-2 relative"
-            >
-              <Image
-                src={url.url}
-                alt="img"
-                fill
-                className="object-contain"
-              />
-            </div>
-          ))
-          : [1, 2].map((_, k) => {
-            return (
-              <div
-                key={k}
-                role="status"
-                className="space-y-8 animate-pulse md:space-y-0 md:space-x-8 md:flex md:items-center"
-              >
-                <div className="flex items-center justify-center min-w-[30vw] h-[28vh] bg-gray-300 rounded sm:w-96 dark:bg-gray-400">
-                  <svg
-                    className="w-12 h-12 text-gray-200"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden="true"
-                    fill="currentColor"
-                    viewBox="0 0 640 512"
-                  >
-                    <path d="M480 80C480 35.82 515.8 0 560 0C604.2 0 640 35.82 640 80C640 124.2 604.2 160 560 160C515.8 160 480 124.2 480 80zM0 456.1C0 445.6 2.964 435.3 8.551 426.4L225.3 81.01C231.9 70.42 243.5 64 256 64C268.5 64 280.1 70.42 286.8 81.01L412.7 281.7L460.9 202.7C464.1 196.1 472.2 192 480 192C487.8 192 495 196.1 499.1 202.7L631.1 419.1C636.9 428.6 640 439.7 640 450.9C640 484.6 612.6 512 578.9 512H55.91C25.03 512 .0006 486.1 .0006 456.1L0 456.1z" />
-                  </svg>
-                </div>
-              </div>
-            );
-          })}
-      </div>
-    </div>
-  );
-};
-export const UploadImage = ({
-  setFiles,
-}: {
-  setFiles: React.Dispatch<React.SetStateAction<File[]>>; // Change the type to accept an array of files
-}) => {
-  const { theme } = useTheme();
-  return (
-    <label
-      htmlFor="dropzone-file"
-      className="flex flex-col items-center justify-center w-full h-[40vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer mb-2"
-      style={{
-        backgroundColor: theme.secondary,
-      }}
-    >
-      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-        <svg
-          aria-hidden="true"
-          className="w-10 h-10 mb-3 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-          />
-        </svg>
-        <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-          <span className="font-semibold">Click to upload</span> or drag and
-          drop
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          SVG, PNG, JPG or GIF (MAX. 800x400px)
-        </p>
-      </div>
-      <input
-        id="dropzone-file"
-        type="file"
-        className="hidden"
-        accept="image/*"
-        onChange={(e) => {
-          if (e.target.files) {
-            // Convert FileList to array of files
-            const fileList = Array.from(e.target.files);
-            setFiles(fileList);
-          } else {
-            setFiles([]);
-          }
-        }}
-        multiple // Allow multiple file selection
-      />
-    </label>
-  );
-};
-
-export const SmartShareLink = ({ status }: { status?: number | null }) => {
-  const { user } = useAuth();
-  const [urls, setUrl] = useState<
-    { name: string; time: string; url: string }[]
-  >([]);
-  const getSmartShareLinks = useCallback(async () => {
-    const data = await fetch("/api/getSmartShareLinks", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ uid: user?.uid }),
-    })
-    data.json().then((res) => {
-      setUrl(res.data);
-    });
-  }, [user?.uid]);
-
-  const [copyState, setCopyState] = useState<number>(-1);
-
-  useEffect(() => {
-    getSmartShareLinks();
-  }, [getSmartShareLinks]);
-
-  const copyURL = (id: number) => {
-    navigator.clipboard.writeText(urls[id].url);
-    setCopyState(id);
-    setTimeout(() => {
-      setCopyState(-1);
-    }, 3000);
-  };
-
-  const { theme } = useTheme();
-
-  return (
-    <div className="px-[2vw] w-2/5 h-full">
-      <h1 className="text-2xl mb-4">
-        Previous Links{"  "}
-        <span className="text-sm text-gray-400">
-          (Click on the link to copy)
-        </span>
-      </h1>
-      {urls && urls.length > 0 ? (
-        urls.map((item, index) => (
-          <div key={index} className="flex flex-col items-center justify-center">
-            <div
-              className="flex items-center w-full h-[5vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer mb-2 relative"
-              style={{
-                backgroundColor: theme.secondary,
-              }}
-            >
-              <div className="w-[90%] h-full bg-blue-200">
-                <input
-                  style={{
-                    backgroundColor: theme.secondary,
-                    color: theme.text,
-                  }}
-                  type="text"
-                  readOnly={true}
-                  value={item.url}
-                  className="w-full h-full flex justify-center items-center p-2"
-                />
-              </div>
-              <div
-                className="w-[10%] h-full  flex items-center "
-                style={{
-                  backgroundColor: theme.accent,
-                }}
-              >
-                <button
-                  key={index}
-                  className="w-full h-1/2 p-2 relative"
-                  onClick={() => {
-                    copyURL(index);
-                  }}
-                >
-                  {copyState === index ? (
-                    <div className="w-full h-full flex justify-center items-center">
-                      Copied
-                    </div>
-                  ) : (
-                    <Image
-                      src={"/copy.svg"}
-                      alt="copy"
-                      style={{
-                        filter: theme.invertImage ? "invert(1)" : "invert(0)",
-                      }}
-                      fill
-                    />
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center w-full h-[2vh] cursor-pointer mb-2 relative">
-              {item.name && (
-                <div className="w-[30%] h-full flex gap-1 items-center">
-                  Name :<p className="text-sm text-gray-400">{item.name}</p>
-                </div>
-              )}
-              {item.time && (
-                <div className="w-[90%] h-full flex gap-1 items-center">
-                  Expire Time :
-                  <p className="text-sm text-gray-400">{item.time} Days</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ))
-      ) : (
-        [1, 2, 3, 4, 5].map((item, k) => (
-          <div
-            key={k}
-            className="flex items-center w-full h-[5vh] border-2 border-gray-300  border-dashed rounded-lg cursor-pointer mb-2 relative"
-          >
-            <div className="w-[90%] h-full flex justify-center items-center animate-pulse "></div>
-            <div
-              className="w-[10%] h-full  flex items-center "
-              style={{
-                backgroundColor: theme.accent,
-              }}
-            >
-              <button className="w-full h-1/2 p-2 relative">
-                <Image
-                  src={"/copy.svg"}
-                  alt="copy"
-                  style={{
-                    filter: theme.invertImage ? "invert(1)" : "invert(0)",
-                  }}
-                  fill
-                />
-              </button>
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-};
-
-
-

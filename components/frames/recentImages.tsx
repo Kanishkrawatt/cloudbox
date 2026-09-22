@@ -1,135 +1,122 @@
 import { datatype, themeType } from "@/components/types";
 import Image from "next/image";
-import styled from "styled-components";
 import { useState } from "react";
 import { Actions } from "@/components/actions";
+import Icon from "@/components/ui/icons";
+
+const COLUMNS = {
+  small: "grid-cols-3 sm:grid-cols-5 lg:grid-cols-8",
+  medium: "grid-cols-2 sm:grid-cols-4 lg:grid-cols-6",
+  large: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
+} as const;
+
+/**
+ * Grid of image tiles. Shared by the home, images, folder and smartshare
+ * screens, `caption` picks which field sits under the thumbnail.
+ */
 const RecentImages = ({
-  data,
+  data = [],
   title,
   theme,
   loadingState,
-  size = "medium"
+  size = "medium",
+  caption = "date",
 }: {
-  data: datatype[];
+  data?: datatype[];
   loadingState: boolean;
-  title: string;
+  title?: string;
   theme: themeType;
-  size?: "small" | "medium" | "large"
+  size?: "small" | "medium" | "large";
+  caption?: "date" | "name";
 }) => {
   const [menu, setMenu] = useState<number>(-1);
+
+  const header = title && (
+    <div className="mb-3 flex items-baseline gap-2">
+      <h2 className="section-label">{title}</h2>
+      {!loadingState && data.length > 0 && (
+        <span className="text-[11px]" style={{ color: theme.muted }}>
+          {data.length}
+        </span>
+      )}
+    </div>
+  );
+
+  if (!loadingState && data.length === 0) {
+    return (
+      <section className="px-4 py-5 sm:px-6">
+        {header}
+        <div
+          className="flex flex-col items-center gap-2 rounded-xl px-6 py-10 text-center"
+          style={{ border: `1px dashed ${theme.border}`, color: theme.muted }}
+        >
+          <Icon name="image" size={22} />
+          <p className="text-[13px]">No images here yet.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <>
-      {loadingState || data.length <= 0 ? (
-        <div className="w-full h-full">
-          <h1
-            className={`font-medium py-5 px-7`}
-            style={{
-              color: theme.text,
-            }}
-          >
-            {title}
-          </h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-5">
-            {[1, 2, 3, 4].map((item) => (
-              <Div
-                className={`rounded-lg focus:ring-4 focus:outline-none w-full h-full`}
-                style={{
-                  backgroundColor: theme.secondary,
-                  color: theme.secondaryText,
-                }}
-                key={item}
-              >
-                <div className={`w-full p-2 ${size == "large" ? "h-[75vw] sm:h-[24vw]" : size == "small" ? "h-[60vw] sm:h-[16vw]" : "h-[70vw] sm:h-[20vw]"} `}>
-                  <div className={`relative w-full  z-20 flex justify-between pl-2 capitalize items-center 
-                    ${size == "large" ? "h-[13%]" : "h-1/6"}`}>
-                    <div className="bg-gray-300 animate-pulse h-5 w-1/2 rounded-lg dark:bg-gray-500"></div>
+    <section className="px-4 py-5 sm:px-6">
+      {header}
+      <div className={`grid gap-3 ${COLUMNS[size]}`}>
+        {loadingState
+          ? [1, 2, 3, 4, 5, 6].map((item) => (
+              <div key={item}>
+                <div
+                  className="skeleton aspect-square w-full rounded-lg"
+                  style={{ border: `1px solid ${theme.border}` }}
+                />
+                <div className="skeleton mt-2 h-3 w-2/3 rounded" />
+              </div>
+            ))
+          : data.map((item, index) => (
+              <figure key={`${item.url}-${index}`} className="group min-w-0">
+                <div
+                  className="relative aspect-square w-full overflow-hidden rounded-lg"
+                  style={{
+                    border: `1px solid ${theme.border}`,
+                    backgroundColor: theme.secondary,
+                  }}
+                >
+                  <Image
+                    src={item.url}
+                    fill
+                    sizes="(max-width: 640px) 45vw, 20vw"
+                    placeholder="blur"
+                    blurDataURL="/image.png"
+                    className="object-cover"
+                    alt={item.name ?? ""}
+                  />
+                  <div className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                     <div
+                      className="relative rounded-md"
                       style={{
-                        filter: theme.invertImage ? "invert(1)" : "invert(0)",
+                        backgroundColor: theme.primary,
+                        border: `1px solid ${theme.border}`,
                       }}
                     >
-                      <Image
-                        src="/threeDotsVertical.svg"
-                        width={20}
-                        height={20}
-                        alt=":"
+                      <Actions
+                        theme={theme}
+                        item={item}
+                        index={index}
+                        menu={menu}
+                        setMenu={setMenu}
                       />
                     </div>
                   </div>
-                  <div
-                    role="status"
-                    className={`relative space-y-8 animate-pulse w-full z-10 ${size == "large" ? "h-[87%]" : "h-5/6"}`}>
-                    <div className="h-full relative  w-full flex items-center justify-center z-10 bg-gray-300 rounded dark:bg-gray-500 ">
-                      <svg
-                        className="w-12 h-12 text-gray-200"
-                        xmlns="http://www.w3.org/2000/svg"
-                        aria-hidden="true"
-                        fill="currentColor"
-                        viewBox="0 0 640 512"
-                      >
-                        <path d="M480 80C480 35.82 515.8 0 560 0C604.2 0 640 35.82 640 80C640 124.2 604.2 160 560 160C515.8 160 480 124.2 480 80zM0 456.1C0 445.6 2.964 435.3 8.551 426.4L225.3 81.01C231.9 70.42 243.5 64 256 64C268.5 64 280.1 70.42 286.8 81.01L412.7 281.7L460.9 202.7C464.1 196.1 472.2 192 480 192C487.8 192 495 196.1 499.1 202.7L631.1 419.1C636.9 428.6 640 439.7 640 450.9C640 484.6 612.6 512 578.9 512H55.91C25.03 512 .0006 486.1 .0006 456.1L0 456.1z" />
-                      </svg>
-                    </div>
-                  </div>
                 </div>
-              </Div>
+                <figcaption className="mt-1.5 min-w-0">
+                  <p className="truncate text-[12px]" title={item.name}>
+                    {caption === "name" ? item.name : item.date}
+                  </p>
+                </figcaption>
+              </figure>
             ))}
-          </div>
-        </div>
-      ) : (
-        <div className="w-full h-full">
-          <h1
-            className={`font-medium py-5 px-7`}
-            style={{
-              color: theme.text,
-            }}
-          >
-            {title}
-          </h1>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-5">
-            {data.map((item, index) => (
-              <Div
-                key={index}
-                className={`rounded-lg focus:ring-4 focus:outline-none w-full h-full`}
-                style={{
-                  backgroundColor: theme.secondary,
-                  color: theme.secondaryText,
-                }}
-              >
-                {/* <Link href={`/image/${item.id}`}> */}
-                <div className={`w-full p-2 ${size == "large" ? "h-[75vw] sm:h-[24vw]" : size == "small" ? "h-[60vw] sm:h-[16vw]" : "h-[70vw] sm:h-[20vw]"} `}>
-                  <div className={`relative w-full  flex justify-between pl-2 capitalize items-center 
-                    ${size == "large" ? "h-[13%]" : "h-1/6"}`}>
-                    <p className="text-xs">
-                      {item.date}
-                    </p>
-                    <Actions theme={theme} item={item} index={index} menu={menu} setMenu={setMenu} />
-                  </div>
-
-                  <div className={`relative w-full ${size == "large" ? "h-[87%]" : "h-5/6"}`}>
-                    <Image
-                      src={item.url}
-                      fill
-                      placeholder="blur"
-                      blurDataURL="/image.png"
-                      className="object-cover rounded-lg "
-                      alt="test"
-                    />
-                  </div>
-                </div>
-                {/* </Link> */}
-              </Div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
+      </div>
+    </section>
   );
 };
 
 export default RecentImages;
-
-export const Div = styled.div`
-  background-color: ${({ color }: { color?: string }) => color};
-`;

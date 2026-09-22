@@ -6,12 +6,14 @@ import db from "@/firebase/firestore";
 import { useAuth } from "../utils/contexts/auth";
 import FileFrame from "@/components/frames/files";
 import Layout from "@/components/layouts/baseLayout";
+import { useSearch, filterGroups } from "@/utils/contexts/search";
 
 function Documents() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [files, setFiles] = useState<fileType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const { query: searchQuery } = useSearch();
 
   const getImageData = useCallback(async (id: string) => {
     const collectionRef = collection(db, `User/${id}/Files`);
@@ -44,10 +46,12 @@ function Documents() {
     if (!user?.uid) return;
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
+  const visible = filterGroups(searchQuery, files);
+
   return (
-    <Layout>
-      {files.length > 0
-        ? files.map((item, index) => (
+    <Layout title="Files">
+      {visible.length > 0
+        ? visible.map((item, index) => (
           <FileFrame
             key={index}
             data={item.data}
@@ -56,9 +60,7 @@ function Documents() {
             title={item.date}
           />
         ))
-        : [1, 2, 3].map((item, index) => (
-          <FileFrame key={index} loadingState={true} theme={theme} />
-        ))}
+        : <FileFrame loadingState={loading} theme={theme} title="Files" />}
     </Layout>
   );
 }

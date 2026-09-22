@@ -1,24 +1,53 @@
 import React from "react";
-import Sidebar from "@/components/ui/sidebar";
 import Image from "next/image";
+import { useRouter } from "next/router";
+import Layout from "@/components/layouts/baseLayout";
 import { useAuth } from "../utils/contexts/auth";
-import { useTheme, sidebar1, sidebar2, theme1, theme2 } from "../utils/contexts/theme";
+import { useTheme } from "../utils/contexts/theme";
+import ThemePicker from "@/components/ui/themePicker";
+import Icon from "@/components/ui/icons";
+import FaceScan from "@/components/ui/faceScan";
+import { useFaceProfile } from "@/utils/contexts/faceProfile";
+
+const Section = ({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) => {
+  const { theme } = useTheme();
+  return (
+    <section className="border-t py-7" style={{ borderColor: theme.border }}>
+      <h2 className="text-[14px] font-medium">{title}</h2>
+      {description && (
+        <p className="mt-1 text-[13px]" style={{ color: theme.muted }}>
+          {description}
+        </p>
+      )}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+};
 
 function Profile() {
   const { user, UpdateUserDetails, signOut } = useAuth();
-  const { theme, setTheme, setSidebar } = useTheme();
-  const logout = () => {
-    signOut();
-    window.location.href = "/";
-  };
+  const { theme } = useTheme();
+  const router = useRouter();
 
-  const [ModalState, setModalState] = React.useState(true);
+  const { enrolled: faceEnrolled, available: faceAvailable, refresh: refreshFace } = useFaceProfile();
+  const [enrolling, setEnrolling] = React.useState(false);
+  const [lockError, setLockError] = React.useState<string | null>(null);
   const [copyState, setCopyState] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
   const [userDetails, setUserDetails] = React.useState({
     name: "",
     email: "",
     photoUrl: "",
   });
+
   React.useEffect(() => {
     setUserDetails({
       name: user?.displayName ?? "",
@@ -27,197 +56,189 @@ function Profile() {
     });
   }, [user]);
 
-  const changeTheme = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const theme = e.target.value;
-    if (theme === "light") {
-      setTheme(theme1);
-      setSidebar(sidebar1);
-
-    } else if (theme === "dark") {
-      setTheme(theme2);
-      setSidebar(sidebar2);
-    } else {
-      setTheme(theme1);
-      setSidebar(sidebar1);
-    }
-  }
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (userDetails.name === "" || userDetails.email === "") {
-      alert("Please fill all the fields");
+    if (!userDetails.name.trim()) return;
+    UpdateUserDetails(userDetails.name.trim(), userDetails.photoUrl);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(user?.uid ?? "");
+    setCopyState(true);
+    setTimeout(() => setCopyState(false), 2500);
+  };
+
+  const removeFace = async () => {
+    setLockError(null);
+    const idToken = await user?.getIdToken();
+    const res = await fetch("/api/faceProfile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, action: "remove" }),
+    });
+    if (!res.ok) {
+      setLockError((await res.json().catch(() => ({})))?.error ?? "Could not remove your face photo.");
       return;
     }
-    UpdateUserDetails(userDetails.name, userDetails.photoUrl);
-
-    setUserDetails({
-      name: user?.displayName ?? "",
-      email: user?.email ?? "",
-      photoUrl: user?.photoURL ?? "",
-    });
+    await refreshFace();
   };
-  const handleCopy = () => {
-    navigator.clipboard.writeText(user!.uid);
-    setCopyState(true);
-    setInterval(() => {
-      setCopyState(false);
-    }
-      , 3000);
+
+  const logout = async () => {
+    await signOut();
+    router.replace("/");
   };
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        width: "100vw",
-        display: "flex",
-        flexDirection: "row",
-        backgroundColor: theme.primary,
-      }}
-    >
-      <Sidebar />
-      <div className="flex flex-col w-full">
-        <div className="flex flex-col items-center justify-center w-full h-[30vh] bg-orange-300">
-          <div
-            id="imageHolder"
-            className="w-32 h-32 rounded-full  relative"
-            
-            onClick={() => setModalState(true)}
+    <Layout title="Profile">
+      <div className="mx-auto w-full max-w-2xl px-4 pb-16 sm:px-6">
+        <div className="flex items-center gap-4 py-7">
+          <span
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full"
+            style={{ backgroundColor: theme.secondary, border: `1px solid ${theme.border}`, color: theme.muted }}
           >
-            <input
-              type="file"
-              className="absolute z-20 h-full w-full opacity-0"
-            />
-            <Image
-              src="/activeUser.svg"
-              fill
-              alt="profile"
-              className="rounded-full"
-            />
+            {user?.photoURL ? (
+              <Image src={user.photoURL} alt="" fill sizes="56px" className="object-cover" />
+            ) : (
+              <Icon name="user" size={22} />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-medium">
+              {user?.displayName ?? "Unnamed account"}
+            </p>
+            <p className="truncate text-[13px]" style={{ color: theme.muted }}>
+              {user?.email}
+            </p>
           </div>
         </div>
-        <form className="px-[5vw] pt-[5vh]" onSubmit={handleSubmit} style={{
-          color: theme.text,
-        }}>
-          <div className="relative z-0 w-full mb-6 group">
-            <input
-              type="text"
-              name="floating_name"
-              id="floating_name"
-              className="block py-2.5 px-0 w-full text-sm bg-transparent border-0 border-b-2 appearance-none"
-              style={{
-                borderColor: theme.secondary,
-              }}
-              placeholder=" "
-              value={userDetails.name}
-              disabled={user?.displayName ? true : false}
-              onChange={(e) =>
-                setUserDetails({ ...userDetails, name: e.target.value })
-              }
-            />
-            {userDetails.name.length <= 0 && (
-              <label
-                htmlFor="floating_name"
-                className="peer-focus:font-medium absolute text-sm"
-                style={{
-                  color: theme.secondaryText,
-                }}
-              >
-                Name
+
+        <Section title="Account" description="Your display name is shown on shared links.">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div>
+              <label htmlFor="name" className="mb-1.5 block text-[13px]">
+                Display name
               </label>
-            )}
-          </div>
-          <div className="relative z-0 w-full mb-6 group">
-            <input
-              type="email"
-              name="floating_company"
-              id="floating_company"
-              className="block py-2.5 px-0 w-full text-sm bg-transparent border-0 border-b-2 appearance-none"
-              placeholder=" "
-              style={{
-                borderColor: theme.secondary,
-              }}
-              value={userDetails.email}
-              disabled={user?.email ? true : false}
-              onChange={(e) =>
-                setUserDetails({ ...userDetails, email: e.target.value })
-              }
-            />
-            {userDetails.email.length <= 0 && (
-              <label
-                htmlFor="floating_company"
-                className="peer-focus:font-medium absolute text-sm"
-                style={{
-                  color: theme.secondaryText,
-                }}
-              >
+              <input
+                id="name"
+                type="text"
+                className="field h-10 max-w-sm text-[13px]"
+                style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+                placeholder="Your name"
+                value={userDetails.name}
+                onChange={(e) => setUserDetails({ ...userDetails, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-[13px]">
                 Email
               </label>
-            )}
-          </div>
-          <div className="relative z-0 w-full mb-6 group ">
-            <label className="text-sm text-gray-500mr-4">
-              Secret Token :
-            </label>
+              <input
+                id="email"
+                type="email"
+                className="field h-10 max-w-sm text-[13px]"
+                style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+                value={userDetails.email}
+                disabled
+                readOnly
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="submit" className="btn btn-primary h-9 text-[13px]">
+                Save changes
+              </button>
+              {saved && (
+                <span className="text-[13px]" style={{ color: theme.muted }}>
+                  Saved
+                </span>
+              )}
+            </div>
+          </form>
+        </Section>
+
+        <Section
+          title="API token"
+          description="Send this as a bearer token to reach your files over the API."
+        >
+          <div className="flex max-w-lg items-center gap-2">
             <input
               type="text"
-              value={user?.uid}
-              className="text-sm w-[16rem] p-2 mx-2  appearance-none rounded-md"
-              style={{ backgroundColor: theme.secondary }}
+              value={user?.uid ?? ""}
+              readOnly
+              onFocus={(e) => e.target.select()}
+              className="field h-9 font-mono text-[12px]"
+              style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
             />
-            {/* copy button */}
-            <button
-              className=" border focus:outline-none  font-medium rounded-lg text-sm px-3 py-1.5 mr-2 mb-2"
-              style={{
-                borderColor: theme.secondary,
-              }}
-              onClick={() => {
-                handleCopy()
-              }}
-            >
-              {
-                copyState ? "Copied" : "Copy"
-              }
+            <button type="button" className="btn h-9 shrink-0 text-[13px]" onClick={handleCopy}>
+              <Icon name={copyState ? "check" : "link"} size={15} />
+              {copyState ? "Copied" : "Copy"}
             </button>
           </div>
-          <div className="max-w-sm mb-6">
-            <label
-              htmlFor="countries"
-              className="block mb-2 text-sm font-medium "
-            >
-              Select Theme
-            </label>
-            <select
-              id="countries"
-              className="border  text-sm rounded-lg block w-full p-2.5 focus:outline-none focus:ring-4 focus:ring-blue-300"
-              onChange={changeTheme}
-              style={{
-                backgroundColor: theme.secondary,
-                borderColor: theme.secondary,
-              }}
-            >
-              <option selected>default</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center "
-          >
-            Submit
-          </button>
-          <button
-            type="button"
-            onClick={logout}
-            className="text-white ml-2 bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center -700"
-          >
-            Logout
-          </button>
+        </Section>
 
-        </form>
+        <Section title="Appearance" description="Applies to every screen, remembered on this device.">
+          <ThemePicker />
+        </Section>
+
+        <Section
+          title="Your face"
+          description="Used to filter your library to the photos you appear in."
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={faceEnrolled ? "btn h-9 text-[13px]" : "btn btn-primary h-9 text-[13px]"}
+              onClick={() => (faceEnrolled ? removeFace() : setEnrolling(true))}
+            >
+              <Icon name={faceEnrolled ? "trash" : "camera"} size={15} />
+              {faceEnrolled ? "Remove my face photo" : "Add my face"}
+            </button>
+            {faceEnrolled && (
+              <span className="text-[13px]" style={{ color: theme.muted }}>
+                Added. Use the Photos of me filter on the Images page.
+              </span>
+            )}
+            {!faceAvailable && (
+              <span className="text-[13px]" style={{ color: theme.muted }}>
+                Needs the face service configured (FACE_API_KEY).
+              </span>
+            )}
+          </div>
+
+          {lockError && (
+            <p className="mt-2 text-[13px]" style={{ color: "#e5484d" }}>
+              {lockError}
+            </p>
+          )}
+
+          <p className="mt-3 max-w-lg text-[12px]" style={{ color: theme.muted }}>
+            This is a filter, not a security feature. Face matching cannot tell a
+            person from a photograph of them, so it is never used to gate access
+            to anything. Your reference photo is kept only to compare against
+            your library, and you can remove it at any time.
+          </p>
+
+          {enrolling && (
+            <FaceScan
+              title="Add your face"
+              action="enroll"
+              onClose={() => setEnrolling(false)}
+              onDone={async () => {
+                setEnrolling(false);
+                await refreshFace();
+              }}
+            />
+          )}
+        </Section>
+
+        <Section title="Session">
+          <button type="button" onClick={logout} className="btn h-9 text-[13px]">
+            Sign out
+          </button>
+        </Section>
       </div>
-    </div>
+    </Layout>
   );
 }
 

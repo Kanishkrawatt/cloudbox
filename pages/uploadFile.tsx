@@ -1,398 +1,381 @@
-import React, { startTransition, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { useAuth } from "../utils/contexts/auth";
-import Login from "./login";
-import { useTheme } from "../utils/contexts/theme";
-import { Preview, TempFilesData } from "./smartshare";
-import Layout from "@/components/layouts/baseLayout";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { uploadBytesResumable, getDownloadURL, ref } from "firebase/storage";
 import { collection, doc, updateDoc, addDoc, getDoc } from "firebase/firestore";
-import storage from "@/firebase/storage";
+import Layout from "@/components/layouts/baseLayout";
+import Icon from "@/components/ui/icons";
 import db from "@/firebase/firestore";
+import { useAuth } from "../utils/contexts/auth";
+import { useTheme } from "../utils/contexts/theme";
+import { TempFilesData } from "./smartshare";
+import { uploadToCloudinary, cloudinaryConfigured } from "@/utils/cloudinary";
 
-export const ImageStatus = ({
-  urls,
-  status = null,
-  setFileNames,
-  fileNames,
-}: {
-  urls: TempFilesData[];
-  status?: number[] | null;
-  setFileNames: React.Dispatch<React.SetStateAction<string[]>>;
-  fileNames: string[];
-}) => {
-  const data = useMemo(() => urls, [urls]);
-  const { theme } = useTheme();
+type Folder = { name: string; id: string };
 
-  const handleFileNameChange = (index: number, newName: string) => {
-    setFileNames((prevNames) =>
-      prevNames.map((name, i) => (i === index ? newName : name))
-    );
-  };
-
-  const getIconSrc = (statusValue: number | null) => {
-    if (statusValue === null || statusValue === 0) {
-      return 'edit.svg';
-    } else if (statusValue > 0 && statusValue < 100) {
-      return 'threeDotsVertical.svg';
-    } else if (statusValue === 100) {
-      return 'trash.svg';
-    } else {
-      return '';
-    }
-  };
-
-  return (
-    <div className="px-[2vw] w-2/5 h-full">
-      <h1 className="text-2xl mb-4">Status</h1>
-      {data && data.length > 0
-        ? data.map((url, k) => (
-            <div
-              key={k}
-              className="flex items-center w-full h-[5vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer mb-2 relative"
-              style={{
-                backgroundColor: theme.secondary,
-              }}
-            >
-              <div className="w-[90%] h-full bg-blue-200">
-                <input
-                  style={{
-                    backgroundColor: theme.secondary,
-                    color: theme.text,
-                  }}
-                  type="text"
-                  value={fileNames[k]}
-                  onChange={(e) => handleFileNameChange(k, e.target.value)}
-                  className="w-full h-full flex justify-center items-center p-2"
-                />
-              </div>
-              <div
-                className="w-[10%] h-full flex items-center"
-                style={{
-                  backgroundColor: theme.accent,
-                }}
-              >
-                <button className="w-full h-1/2 p-2 relative">
-                  <Image
-                    src={getIconSrc(status ? status[k] : null)}
-                    alt={getIconSrc(status ? status[k] : null).replace('.svg', '')}
-                    style={{
-                      filter: theme.invertImage ? 'invert(1)' : 'invert(0)',
-                    }}
-                    fill
-                  />
-                </button>
-              </div>
-            </div>
-          ))
-        : [1, 2, 3, 4, 5].map((item, k) => (
-            <div
-              key={k}
-              className="flex items-center w-full h-[5vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer mb-2 relative"
-            >
-              <div className="w-[90%] h-full flex justify-center items-center animate-pulse"></div>
-              <div
-                className="w-[10%] h-full flex items-center"
-                style={{
-                  backgroundColor: theme.accent,
-                }}
-              >
-                <button className="w-full h-1/2 p-2 relative">
-                  <Image
-                    src={'trash.svg'}
-                    alt="trash"
-                    fill
-                    style={{
-                      filter: theme.invertImage ? 'invert(1)' : 'invert(0)',
-                    }}
-                  />
-                </button>
-              </div>
-            </div>
-          ))}
-    </div>
-  );
-};
+const mb = (bytes: number) => bytes / 1024 ** 2;
+const prettySize = (bytes: number) =>
+  bytes <= 0
+    ? "0 KB"
+    : bytes >= 1024 ** 2
+    ? `${mb(bytes).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 export function UploadFile() {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [queue, setQueue] = useState<TempFilesData[]>([]);
+  const [names, setNames] = useState<string[]>([]);
   const [progress, setProgress] = useState<number[]>([]);
-  const [urls, setUrls] = useState<TempFilesData[]>([]);
-  const [fileNames, setFileNames] = useState<string[]>([]);
-
-  if (!user) {
-    return <Login />;
-  }
-
-  return (
-    <Layout>
-      <div className="flex flex-col w-full p-2 gap-9">
-        <div className="w-full max-h-[55vh] gap-9 flex flex-row"
-          style={{
-            color: theme.text,
-          }}>
-          <div className="px-[2vw] w-1/2">
-            <h1 className="text-2xl mb-4">Upload</h1>
-            <Upload status={setProgress} urls={urls} files={setUrls} fileNames={fileNames} setFileNames={setFileNames} />
-          </div>
-          <ImageStatus urls={urls} status={progress} setFileNames={setFileNames} fileNames={fileNames} />
-        </div>
-        <Preview urls={urls} theme={theme} />
-      </div>
-    </Layout>
-  );
-}
-
-function Upload({
-  files,
-  urls,
-  status,
-  fileNames,
-  setFileNames,
-  location = "Home",
-}: {
-  files: React.Dispatch<React.SetStateAction<TempFilesData[]>>;
-  status: React.Dispatch<React.SetStateAction<number[]>>;
-  urls: TempFilesData[];
-  fileNames: string[];
-  setFileNames: React.Dispatch<React.SetStateAction<string[]>>;
-  location?: string;
-}) {
-  const [filesArray, setFilesArray] = useState<File[]>([]);
-  const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const { theme } = useTheme();
-  const [dropdownData, setDropdownData] = useState<string>("Add to Folder");
-  const [folders, setFolders] = useState<{ name: string, id: string }[]>([]);
-  const [showFolder, setShowFolder] = useState<boolean>(false);
-  const [strageData, setStorageData] = useState<{ used: number, free: number, total: number }>({ used: 0, free: 0, total: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const getFolders = useCallback(async () => {
-    const folderData = await axios.post("/api/getFolders", { uid: user?.uid });
-    const data = folderData.data;
-    setFolders(data["data"]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [folderName, setFolderName] = useState<string>("");
+  const [showFolders, setShowFolders] = useState(false);
+  const [quota, setQuota] = useState({ used: 0, free: 0, total: 0 });
+
+  const refreshQuota = useCallback(async () => {
+    if (!user?.uid) return;
+    const api = await axios.post("/api/storageInfo", { uid: user.uid });
+    setQuota(api.data);
   }, [user?.uid]);
 
   useEffect(() => {
-    getFolders();
-    const getStorageData = async () => {
-      const api = await axios.post("/api/storageInfo", {
-        uid: user?.uid,
-      });
-      setStorageData(api.data);
-    }
-    getStorageData();
-  }, [getFolders, user?.uid]);
+    if (!user?.uid) return;
+    axios
+      .post("/api/getFolders", { uid: user.uid })
+      .then((res) => setFolders(res.data?.data ?? []))
+      .catch(() => setFolders([]));
+    refreshQuota();
+  }, [user?.uid, refreshQuota]);
 
-  const Path = (file: File) => (file.type.startsWith("image/") ? "Images" : "Files");
+  const kindOf = (file: File) => (file.type.startsWith("image/") ? "Images" : "Files");
 
-  const uploadFileToFirestore = useCallback(
-    async (file: File, downloadURL: string, newFileName: string, folderId: string) => {
-      try {
-        await addDoc(collection(db, `User/${user?.uid}/Folders/${folderId}/${Path(file)}`), {
-          name: newFileName,
-          size: file.size,
-          location: location,
-          type: file.type,
-          url: downloadURL,
-          date: new Date().toDateString(),
-        });
-      } catch (error: any) {
-        setError(error.message);
-      }
-    },
-    [location, user?.uid]
-  );
-
-  const HandleStorage = useCallback(async (size: number) => {
-    const userDocRef = doc(db, "User", `${user?.uid}`);
-    const data = await getDoc(userDocRef);
-    const Storage = data.data()?.Storage;
-    await updateDoc(userDocRef, {
-      Storage: {
-        ...Storage,
-        Used: Storage.Used + size / 1024 ** 2,
-        Free: Storage.Free - size / 1024 ** 2,
-      },
-    });
-    const userData = JSON.parse(
-      (localStorage && localStorage.getItem("User")) ?? "{}"
-    );
-    localStorage &&
-      localStorage.setItem(
-        "User",
-        JSON.stringify({
-          ...userData,
-          Storage: {
-            ...userData.Storage,
-            Used: Storage.Used + size / 1024 ** 2,
-            Free: Storage.Free - size / 1024 ** 2,
-          },
-        })
-      );
-  }, [user?.uid]);
-
-  const uploadFileToStorage = useCallback(
-    async (file: File, newFileName: string, index: number, folderId: string) => {
-      const storageRef = ref(storage, `${user?.uid}/Folders/${folderId}/${Path(file)}/${newFileName}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          status((prev) => {
-            return prev.map((p, i) => {
-              return i === index ? Math.round(progress) : p
-            })
-          });
-        },
-        (error) => {
-          setError(error.message);
-        },
-        async () => {
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            await uploadFileToFirestore(file, downloadURL, newFileName, folderId);
-            status((prev) => {
-              return prev.map((p, i) => {
-                return i === index ? 100 : p
-              })
-            });
-            files((prev) =>
-              prev.map((url, i) =>
-                i === index ? { ...url, status: 'success' } : url
-              )
-            );
-          } catch (error: any) {
-            setError(error.message);
-          }
-        }
-      );
-    },
-    [user?.uid, status, uploadFileToFirestore, files]
-  );
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (fileList) {
-      const newFilesArray = Array.from(fileList);
-      setFilesArray((prevFilesArray) => [...prevFilesArray, ...newFilesArray]);
-      const newUrls = newFilesArray.map(file => ({
-        file: file,
+  const addFiles = (list: FileList | File[]) => {
+    const incoming = Array.from(list);
+    if (!incoming.length) return;
+    setError(null);
+    setQueue((prev) => [
+      ...prev,
+      ...incoming.map((file) => ({
+        file,
         url: URL.createObjectURL(file),
-        status: 'pending' // Add status property
-      }));
-      files((prevUrls) => [...prevUrls, ...newUrls]);
-      setFileNames((prevFileNames) => [...prevFileNames, ...newFilesArray.map(file => file.name.split(".").slice(0, -1).join("."))]);
-      status((prevProgress) => [...prevProgress, ...Array(newFilesArray.length).fill(0)]);
+        status: "pending",
+      })),
+    ]);
+    setNames((prev) => [
+      ...prev,
+      ...incoming.map((file) => file.name.split(".").slice(0, -1).join(".") || file.name),
+    ]);
+    setProgress((prev) => [...prev, ...incoming.map(() => 0)]);
+  };
+
+  const removeAt = (index: number) => {
+    setQueue((prev) => prev.filter((_, i) => i !== index));
+    setNames((prev) => prev.filter((_, i) => i !== index));
+    setProgress((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const writeMetadata = useCallback(
+    async (
+      file: File,
+      upload: { url: string; publicId: string; resourceType: string },
+      newName: string,
+      folderId: string
+    ) => {
+      // An empty folderId would produce "Folders//Images", not a valid path.
+      const path = folderId
+        ? `User/${user?.uid}/Folders/${folderId}/${kindOf(file)}`
+        : `User/${user?.uid}/${kindOf(file)}`;
+      await addDoc(collection(db, path), {
+        name: newName,
+        size: file.size,
+        location: "Home",
+        type: file.type,
+        url: upload.url,
+        publicId: upload.publicId,
+        resourceType: upload.resourceType,
+        date: new Date().toDateString(),
+      });
+    },
+    [user?.uid]
+  );
+
+  const chargeQuota = useCallback(
+    async (size: number) => {
+      const userDocRef = doc(db, "User", `${user?.uid}`);
+      const snap = await getDoc(userDocRef);
+      const Storage = snap.data()?.Storage;
+      if (!Storage) return;
+      await updateDoc(userDocRef, {
+        Storage: {
+          ...Storage,
+          Used: Storage.Used + mb(size),
+          Free: Storage.Free - mb(size),
+        },
+      });
+    },
+    [user?.uid]
+  );
+
+  const uploadOne = useCallback(
+    async (file: File, newName: string, index: number, folderId: string) => {
+      const idToken = await user?.getIdToken();
+      if (!idToken) throw new Error("Your session expired. Sign in again.");
+      const folder = folderId
+        ? `Folders/${folderId}/${kindOf(file)}`
+        : kindOf(file);
+
+      const upload = await uploadToCloudinary({
+        file,
+        idToken,
+        folder,
+        fileName: newName,
+        onProgress: (pct) =>
+          setProgress((prev) => prev.map((p, i) => (i === index ? pct : p))),
+      });
+
+      await writeMetadata(file, upload, newName, folderId);
+      setProgress((prev) => prev.map((p, i) => (i === index ? 100 : p)));
+      setQueue((prev) =>
+        prev.map((item, i) => (i === index ? { ...item, status: "success" } : item))
+      );
+    },
+    [user, writeMetadata]
+  );
+
+  const pendingSize = queue
+    .filter((item) => item.status !== "success")
+    .reduce((sum, item) => sum + item.file.size, 0);
+
+  const upload = async () => {
+    if (!queue.length || uploading) return;
+    if (!cloudinaryConfigured()) {
+      setError(
+        "Uploads are not configured yet: set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET."
+      );
+      return;
+    }
+    if (mb(pendingSize) > quota.free) {
+      setError(
+        `Not enough space: need ${mb(pendingSize).toFixed(2)} MB, ${quota.free.toFixed(2)} MB free.`
+      );
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    const folderId = folders.find((f) => f.name === folderName)?.id ?? "";
+
+    // Sequential: chargeQuota is a read-modify-write on one document, so
+    // parallel uploads used to overwrite each other's totals.
+    try {
+      for (let i = 0; i < queue.length; i++) {
+        if (queue[i].status === "success") continue;
+        // Charge only after the bytes actually landed, or a failed upload
+        // (bad rules, no Blaze plan, lost connection) still eats quota.
+        await uploadOne(queue[i].file, names[i], i, folderId);
+        await chargeQuota(queue[i].file.size);
+      }
+      await refreshQuota();
+    } catch (err: any) {
+      setError(err?.message ?? "Upload failed.");
+    } finally {
+      setUploading(false);
     }
   };
 
-  const upload = () => {
-    const selectedFolder = folders.find(folder => folder.name === dropdownData);
-    const folderId = selectedFolder ? selectedFolder.id : null;
-
-    filesArray.forEach(async (file, index) => {
-      if (urls[index].status !== 'success') {
-        await HandleStorage(file.size);
-        if (folderId) {
-          await uploadFileToStorage(file, fileNames[index], index, folderId);
-        } else {
-          await uploadFileToStorage(file, fileNames[index], index, '');
-        }
-      }
-    });
-  };
+  const done = queue.length > 0 && queue.every((item) => item.status === "success");
 
   return (
-    <div className="flex items-center w-full flex-col">
-      <div className="flex flex-col items-center justify-center w-full" style={{ color: theme.text }}>
-        <div className="flex items-center justify-center w-full">
-          <label
-            htmlFor="dropzone-file"
-            className="flex flex-col items-center justify-center w-full h-[40vh] border-2 border-gray-300 border-dashed rounded-lg cursor-pointer mb-2"
-            style={{ backgroundColor: theme.secondary }}
-          >
-            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <svg
-                aria-hidden="true"
-                className="w-10 h-10 mb-3 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
-              <p className="mb-2 text-sm">
-                <span className="font-semibold">Click to upload</span> or drag and drop
-              </p>
-              <p className="text-xs">SVG, PNG, JPG or GIF (MAX. 800x400px)</p>
-            </div>
-            <input
-              id="dropzone-file"
-              type="file"
-              className="hidden"
-              onChange={handleFileChange}
-              multiple
-            />
-          </label>
+    <Layout title="Upload">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            addFiles(e.dataTransfer.files);
+          }}
+          onClick={() => inputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+          className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl px-6 py-12 text-center transition-colors"
+          style={{
+            border: `1px dashed ${dragging ? theme.accent : theme.border}`,
+            backgroundColor: dragging ? theme.secondary : "transparent",
+            color: theme.muted,
+          }}
+        >
+          <Icon name="upload" size={22} />
+          <p className="text-[13px]" style={{ color: theme.text }}>
+            Drop files here, or click to browse
+          </p>
+          <p className="text-[12px]">Images go to Images, everything else to Files</p>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files ?? []);
+              e.target.value = "";
+            }}
+          />
         </div>
-      </div>
-      <div className="w-full flex items-center gap-2 justify-between">
-        <div className="flex relative items-center gap-2">
-          <div className="flex items-center gap-2">
-            <button id="dropdownUsersButton" onClick={() => { setShowFolder(!showFolder) }} className="text-black justify-between min-w-[160px] bg-[#f2f2f2] border-[2px] border-dashed border-[#D1D5DB] hover:bg-[#fffff] font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600" type="button">{dropdownData} <svg className="w-2.5 h-2.5 ms-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4" />
-            </svg>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              className="btn h-9 text-[13px]"
+              onClick={() => setShowFolders((v) => !v)}
+              aria-expanded={showFolders}
+            >
+              <Icon name="folder" size={15} />
+              {folderName || "No folder"}
+              <Icon name="chevronDown" size={14} />
             </button>
-            {showFolder && (
-              <div className="z-10 absolute top-[120%] bg-white rounded-lg shadow w-60 dark:bg-gray-700">
-                <ul className="h-48 py-2 overflow-y-auto text-gray-700 dark:text-gray-200" aria-labelledby="dropdownUsersButton">
-                  {folders.map((folder, index) => (
-                    <li key={index}
-                      className="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-                      onClick={() => {
-                        setDropdownData(folder.name);
-                        setShowFolder(false);
-                      }}
-                    >
-                      {folder.name}
-                    </li>
-                  ))}
-                </ul>
-                <a href="#" className="flex items-center p-3 text-sm font-medium text-blue-600 border-t border-gray-200 rounded-b-lg bg-gray-50 dark:border-gray-600 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-blue-500 hover:underline">
-                  <svg className="w-4 h-4 me-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
-                    <path d="M6.5 9a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9ZM8 10H5a5.006 5.006 0 0 0-5 5v2a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-2a5.006 5.006 0 0 0-5-5Zm11-3h-2V5a1 1 0 0 0-2 0v2h-2a1 1 0 1 0 0 2h2v2a1 1 0 0 0 2 0V9h2a1 1 0 1 0 0-2Z" />
-                  </svg>
-                  Add new Folder
-                </a>
+            {showFolders && (
+              <div className="menu absolute left-0 top-11 z-40 max-h-56 w-56 overflow-y-auto p-1.5">
+                <button
+                  type="button"
+                  className="menu-item text-[13px]"
+                  onClick={() => {
+                    setFolderName("");
+                    setShowFolders(false);
+                  }}
+                >
+                  No folder
+                </button>
+                {folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    className="menu-item text-[13px]"
+                    onClick={() => {
+                      setFolderName(folder.name);
+                      setShowFolders(false);
+                    }}
+                  >
+                    <Icon name="folder" size={15} />
+                    <span className="truncate">{folder.name}</span>
+                  </button>
+                ))}
+                {folders.length === 0 && (
+                  <p className="px-2.5 py-2 text-[12px]" style={{ color: theme.muted }}>
+                    No folders yet.
+                  </p>
+                )}
               </div>
             )}
           </div>
-          <div className="text-black justify-between bg-[#f2f2f2] border-[2px] border-dashed border-[#D1D5DB] hover:bg-[#fffff] font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600">
-            Upload Size : {(filesArray.reduce((acc, file) => acc + file.size, 0) / 1024 ** 2).toFixed(2)} MB
-          </div>
-          <div className="text-black justify-between bg-[#f2f2f2] border-[2px] border-dashed border-[#D1D5DB] hover:bg-[#fffff] font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600">
-            Available Storage : {(strageData.free).toFixed(2)} MB
-          </div>
-        </div>
-        <button type="button" onClick={upload} className="p-2.5 ms-2 min-w-[100px] text-sm font-medium text-black bg-[#F09B6D] rounded-lg border border-[#F09B6D] hover:bg-[#c68d6e] dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
-          Upload
-          <span className="text-[10px] text-[#515151] m-1">
-            Ctrl + U
+
+          <span className="text-[12px]" style={{ color: theme.muted }}>
+            {queue.length
+              ? `${prettySize(pendingSize)} queued · `
+              : "Nothing queued · "}
+            {quota.free.toFixed(1)} MB free
           </span>
-        </button>
+
+          <button
+            type="button"
+            onClick={upload}
+            disabled={!queue.length || uploading || done}
+            className="btn btn-primary ml-auto h-9 text-[13px]"
+          >
+            {uploading ? "Uploading..." : done ? "Uploaded" : `Upload ${queue.length || ""}`}
+          </button>
+        </div>
+
+        {error && (
+          <p
+            className="mt-3 rounded-lg px-3 py-2 text-[13px]"
+            role="alert"
+            style={{ backgroundColor: theme.secondary, color: "#e5484d" }}
+          >
+            {error}
+          </p>
+        )}
+
+        {queue.length > 0 && (
+          <div
+            className="mt-5 overflow-hidden rounded-xl"
+            style={{ border: `1px solid ${theme.border}` }}
+          >
+            {queue.map((item, index) => (
+              <div
+                key={item.url}
+                className="flex items-center gap-3 px-3 py-2.5"
+                style={{ borderTop: index ? `1px solid ${theme.border}` : undefined }}
+              >
+                <span
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                  style={{ backgroundColor: theme.secondary, color: theme.muted }}
+                >
+                  {item.file.type.startsWith("image/") ? (
+                    // Plain <img>: next/image cannot load blob: object URLs.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <Icon name="file" size={16} />
+                  )}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <input
+                    type="text"
+                    value={names[index] ?? ""}
+                    onChange={(e) =>
+                      setNames((prev) => prev.map((n, i) => (i === index ? e.target.value : n)))
+                    }
+                    aria-label="File name"
+                    className="w-full bg-transparent text-[13px] outline-none"
+                  />
+                  <div className="mt-1 flex items-center gap-2">
+                    <div
+                      className="h-1 flex-1 overflow-hidden rounded-full"
+                      style={{ backgroundColor: theme.border }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-[width]"
+                        style={{
+                          width: `${progress[index] ?? 0}%`,
+                          backgroundColor: theme.accent,
+                        }}
+                      />
+                    </div>
+                    <span className="shrink-0 text-[11px]" style={{ color: theme.muted }}>
+                      {item.status === "success"
+                        ? "Done"
+                        : progress[index]
+                        ? `${progress[index]}%`
+                        : prettySize(item.file.size)}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeAt(index)}
+                  aria-label="Remove from queue"
+                  className="shrink-0 rounded-md p-1.5"
+                  style={{ color: theme.muted }}
+                >
+                  <Icon name="close" size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </Layout>
   );
 }
 

@@ -9,13 +9,8 @@ import { useTheme } from "../utils/contexts/theme";
 const Api = ({ source }: { source: any }) => {
   const { theme } = useTheme();
   return (
-    <Layout >
-      <div className="px-10"
-        style={{
-          color: theme.text,
-          lineHeight: "3rem",
-        }}
-      >
+    <Layout title="API">
+      <div className="max-w-3xl px-4 py-6 text-[14px] leading-7 sm:px-6">
         <MDXRemote {...source} components={components} />
       </div>
     </Layout>

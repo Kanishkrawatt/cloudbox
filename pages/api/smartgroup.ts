@@ -64,7 +64,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         : process.env.NEXT_PUBLIC_SERVER_URL;
 
     const body = {
-      imageUrls: data.map((item) => item.url),
+      imageUrls: data.map((item: { url: string }) => item.url),
     };
     // Response is coming but taking too much time
     axios
