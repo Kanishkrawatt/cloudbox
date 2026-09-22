@@ -91,7 +91,7 @@ const FaceScan = ({
         fileName: `face-${action}`,
       });
 
-      const res = await fetch("/api/faceLock", {
+      const res = await fetch("/api/faceProfile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
