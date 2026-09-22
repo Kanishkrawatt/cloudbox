@@ -54,7 +54,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userRef = doc(db, "User", uid);
   const stored = (await getDoc(userRef)).data()?.people as PeopleDoc | undefined;
 
+  const userData = (await getDoc(userRef)).data() ?? {};
+  const pendingJob: string | undefined = userData.peopleJobId;
+
   if (action === "status") {
+    // A run whose browser went away is finished here instead.
+    if (pendingJob && faceApiConfigured()) {
+      const { ok, status, body } = await faceJobStatus(pendingJob);
+      if (status === 404 || (ok && body.status === "failed")) {
+        await setDoc(userRef, { peopleJobId: null }, { merge: true });
+      } else if (ok && (!body.status || body.status === "done")) {
+        const images = await getDocs(collection(db, `User/${uid}/Images`));
+        const urls = images.docs.map((d) => d.data().url as string).filter(Boolean);
+        const next = toStored(body as FaceGroupResult, urls, userData.peopleThreshold ?? undefined);
+        const people: PeopleDoc = { ...next, names: carryNames(stored, next) };
+        await setDoc(userRef, { people, peopleJobId: null }, { merge: true });
+        return res.status(200).json({ people, available: true });
+      } else {
+        return res.status(200).json({ people: stored ?? null, available: true, state: body.status ?? "running", jobId: pendingJob });
+      }
+    }
     return res.status(200).json({ people: stored ?? null, available: faceApiConfigured() });
   }
 
@@ -78,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const finish = async (body: FaceGroupResult) => {
     const next = toStored(body, urls, threshold);
     const people: PeopleDoc = { ...next, names: carryNames(stored, next) };
-    await setDoc(userRef, { people }, { merge: true });
+    await setDoc(userRef, { people, peopleJobId: null }, { merge: true });
     return people;
   };
 
@@ -94,6 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (urls.length > JOB_THRESHOLD) {
       const { ok, status, body } = await submitFaceJob(urls, threshold);
       if (!ok) return res.status(status).json({ error: faceApiError(status, body) });
+      await setDoc(userRef, { peopleJobId: body.jobId, peopleThreshold: threshold ?? null }, { merge: true });
       return res.status(202).json({ state: "queued", jobId: body.jobId, images: body.images });
     }
     const { ok, status, body } = await groupFaces(urls, threshold);

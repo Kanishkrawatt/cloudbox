@@ -11,6 +11,10 @@ import {
 } from "firebase/firestore";
 import db from "../../../firebase/firestore";
 import { fireWebhook } from "@/utils/webhook";
+import { advanceShareFaces } from "@/utils/faceJobs";
+
+// Finishing a face job can take a status call to a slow service.
+export const config = { maxDuration: 60 };
 
 export type SharePayload = {
   name: string;
@@ -92,8 +96,16 @@ export default async function handler(
   res: NextApiResponse<SharePayload | { error: string }>
 ) {
   try {
-    const loaded = await loadShare(String(req.query.id ?? ""));
+    let loaded = await loadShare(String(req.query.id ?? ""));
     if ("error" in loaded) return res.status(loaded.status).json({ error: loaded.error });
+
+    // Move a stuck face job along and re-read, so a recipient's poll can
+    // finish sorting even after the owner closed their tab.
+    if (loaded.share.faceStatus === "running") {
+      await advanceShareFaces(loaded.uid, loaded.shareId).catch(() => undefined);
+      const again = await loadShare(String(req.query.id ?? ""));
+      if (!("error" in again)) loaded = again;
+    }
     const { uid, shareId, ref, share, expiresOn } = loaded;
 
     // `peek` is for background polling (face status); only a real open counts.

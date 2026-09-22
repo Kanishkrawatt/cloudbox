@@ -128,6 +128,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await setDoc(shareRef, { faceStatus: "failed" }, { merge: true });
       return res.status(status).json({ error: faceApiError(status, body) });
     }
+    // Stored so the server can finish the job even if this browser goes away.
+    await setDoc(
+      shareRef,
+      { faceJobId: body.jobId, faceAttempts: 1, faceThreshold: threshold ?? null, faceSubmittedAt: new Date().toISOString() },
+      { merge: true }
+    );
     return res.status(202).json({ state: "queued", jobId: body.jobId, images: body.images });
   }
 

@@ -54,8 +54,33 @@ function People() {
       setAvailable(Boolean(status.body.available));
       setLibrary(snap.docs.map((d) => d.data() as datatype));
       setLoading(false);
+      // A scan started earlier is still running on the service; pick it up.
+      if (status.body.jobId) {
+        setState("working");
+        setMessage("A scan is still running. Waiting for it to finish…");
+        resume(status.body.jobId);
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, post]);
+
+  const resume = async (jobId: string) => {
+    for (let i = 0; i < 90; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const { body } = await post({ action: "poll", jobId });
+      if (body.error) {
+        setMessage(body.error);
+        return setState("idle");
+      }
+      if (body.state === "done") {
+        setPeople(body.people);
+        setMessage("");
+        return setState("idle");
+      }
+    }
+    setMessage("That took too long. Try again in a moment.");
+    setState("idle");
+  };
 
   const run = async () => {
     setState("working");
