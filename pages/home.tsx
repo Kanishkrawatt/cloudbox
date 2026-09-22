@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import RecentImages from "@/components/frames/recentImages";
 import RecentFiles from "@/components/frames/recentFiles";
@@ -42,7 +42,7 @@ function Home() {
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
 
-  const visible = filterItems(searchQuery, data);
+  const visible = useMemo(() => filterItems(searchQuery, data), [searchQuery, data]);
   const firstName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0];
 
   return (

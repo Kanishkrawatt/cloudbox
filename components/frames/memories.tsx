@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { datatype, themeType } from "@/components/types";
@@ -9,7 +9,7 @@ import Icon from "@/components/ui/icons";
 /** "On this day": same calendar date in earlier years, with a one-tap share. */
 const Memories = ({ data, theme }: { data: datatype[]; theme: themeType }) => {
   const router = useRouter();
-  const hits = onThisDay(data);
+  const hits = useMemo(() => onThisDay(data), [data]);
   if (hits.length === 0) return null;
 
   const years = Array.from(new Set(hits.map((h) => new Date(h.date).getFullYear())));

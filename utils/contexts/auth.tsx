@@ -8,7 +8,7 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 type authContextType = {
   user: User | null;
@@ -40,12 +40,18 @@ export default function AuthProvider({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Subscribe once; re-subscribing on every user change re-fired the callback.
+  useEffect(
+    () =>
+      auth.onAuthStateChanged((user) => {
+        setUser(user);
+        setLoading(false);
+      }),
+    []
+  );
+
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setUser(user);
-      setLoading(false);
-    });
-    if (!user) return unsubscribe;
+    if (!user) return;
     const CreateUserDoc = async () => {
       const customId = `${user.uid}`;
       const userDocRef = doc(db, "User", customId);
@@ -87,10 +93,9 @@ export default function AuthProvider({
       }
     };
     CreateUserDoc();
-    return unsubscribe;
   }, [user]);
 
-  const UpdateUserDetails = async (name: string, photoURL: string) => {
+  const UpdateUserDetails = useCallback(async (name: string, photoURL: string) => {
     try {
       const UserDetails = {
         name: name,
@@ -114,40 +119,36 @@ export default function AuthProvider({
     } catch (error: any) {
       setError(error.message);
     }
-  };
+  }, [user?.uid]);
   // These are promises: without await the try/catch never saw a failed login,
   // so wrong-password errors were dropped instead of shown.
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       setError(error.message);
     }
-  };
-  const signUp = async (email: string, password: string) => {
+  }, []);
+  const signUp = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       setError(error.message);
     }
-  };
-  const signOut = async () => {
+  }, []);
+  const signOut = useCallback(async () => {
     try {
       await auth.signOut();
     } catch (error: any) {
       setError(error.message);
     }
-  };
-  const value: authContextType = {
-    user,
-    loading,
-    error,
-    signIn,
-    signUp,
-    signOut,
-    UpdateUserDetails,
-  };
+  }, []);
+  // Memoised so consumers only re-render when auth state actually changes.
+  const value = useMemo<authContextType>(
+    () => ({ user, loading, error, signIn, signUp, signOut, UpdateUserDetails }),
+    [user, loading, error, signIn, signUp, signOut, UpdateUserDetails]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

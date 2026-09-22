@@ -1,6 +1,6 @@
 import { datatype, themeType } from "@/components/types";
 import Image from "next/image";
-import { useState } from "react";
+import React, { memo, useState } from "react";
 import { Actions } from "@/components/actions";
 import Icon from "@/components/ui/icons";
 import { useSelection } from "@/utils/contexts/selection";
@@ -77,101 +77,124 @@ const RecentImages = ({
                 <div className="skeleton mt-2 h-3 w-2/3 rounded" />
               </div>
             ))
-          : data.map((item, index) => {
-              const selected = selection.has(item.url);
-              return (
-              <figure key={`${item.url}-${index}`} className="group relative min-w-0">
-                <div
-                  className="relative aspect-square w-full overflow-hidden rounded-lg transition-[box-shadow,transform]"
-                  onClick={selecting ? () => selection.toggle(item) : undefined}
-                  style={{
-                    border: `1px solid ${selected ? theme.accent : theme.border}`,
-                    boxShadow: selected ? `0 0 0 2px ${theme.accent}` : undefined,
-                    transform: selected ? "scale(0.96)" : undefined,
-                    backgroundColor: theme.secondary,
-                    cursor: selecting ? "pointer" : undefined,
-                  }}
-                >
-                  {isVideo(item) ? (
-                    <>
-                      <video
-                        src={item.url}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="h-full w-full object-cover"
-                      />
-                      <span
-                        className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-6 w-6 items-center justify-center rounded-full"
-                        style={{ backgroundColor: `${theme.primary}d9`, color: theme.text }}
-                        aria-hidden="true"
-                      >
-                        <Icon name="video" size={13} />
-                      </span>
-                    </>
-                  ) : (
-                    <Image
-                      src={item.url}
-                      fill
-                      sizes="(max-width: 640px) 45vw, 20vw"
-                      placeholder="blur"
-                      blurDataURL="/image.png"
-                      className="object-cover"
-                      alt={item.name ?? ""}
-                    />
-                  )}
-                </div>
-                {/* Select checkbox: always shown once a selection exists, hover-revealed otherwise. */}
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={selected}
-                  aria-label={selected ? `Deselect ${item.name}` : `Select ${item.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selection.toggle(item);
-                  }}
-                  className={`absolute left-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full shadow-sm backdrop-blur-sm transition-opacity ${
-                    selected || selecting
-                      ? "opacity-100"
-                      : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                  }`}
-                  style={{
-                    backgroundColor: selected ? theme.accent : "rgba(0,0,0,0.45)",
-                    color: selected ? theme.primary : "#fff",
-                  }}
-                >
-                  <Icon name="check" size={13} strokeWidth={3} className={selected ? "" : "opacity-60"} />
-                </button>
-                {/* Outside the clipped tile so the dropdown is never cut off;
-                    always visible on touch screens, hover-revealed with a mouse. */}
-                <div
-                  className={`absolute right-2 top-2 transition-opacity ${
-                    menu === index
-                      ? "opacity-100"
-                      : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
-                  }`}
-                >
-                  <Actions
-                    theme={theme}
-                    item={item}
-                    index={index}
-                    menu={menu}
-                    setMenu={setMenu}
-                    variant="tile"
-                  />
-                </div>
-                <figcaption className="mt-1.5 min-w-0">
-                  <p className="truncate text-[12px]" title={item.name}>
-                    {caption === "name" ? item.name : item.date}
-                  </p>
-                </figcaption>
-              </figure>
-              );
-            })}
+          : data.map((item, index) => (
+              <Tile
+                key={`${item.url}-${index}`}
+                item={item}
+                index={index}
+                theme={theme}
+                caption={caption === "name" ? item.name : item.date}
+                selected={selection.has(item.url)}
+                selecting={selecting}
+                menuOpen={menu === index}
+                setMenu={setMenu}
+                toggle={selection.toggle}
+              />
+            ))}
       </div>
     </section>
   );
 };
 
 export default RecentImages;
+
+/**
+ * One thumbnail. Memoised on primitive props so a menu opening on one tile, a
+ * selection change elsewhere, or a search keystroke does not re-render the
+ * whole grid; only tiles whose own state changed redraw.
+ */
+const Tile = memo(function Tile({
+  item,
+  index,
+  theme,
+  caption,
+  selected,
+  selecting,
+  menuOpen,
+  setMenu,
+  toggle,
+}: {
+  item: datatype;
+  index: number;
+  theme: themeType;
+  caption: string;
+  selected: boolean;
+  selecting: boolean;
+  menuOpen: boolean;
+  setMenu: React.Dispatch<React.SetStateAction<number>>;
+  toggle: (item: datatype) => void;
+}) {
+  return (
+    <figure className="group relative min-w-0">
+      <div
+        className="relative aspect-square w-full overflow-hidden rounded-lg transition-[box-shadow,transform]"
+        onClick={selecting ? () => toggle(item) : undefined}
+        style={{
+          border: `1px solid ${selected ? theme.accent : theme.border}`,
+          boxShadow: selected ? `0 0 0 2px ${theme.accent}` : undefined,
+          transform: selected ? "scale(0.96)" : undefined,
+          backgroundColor: theme.secondary,
+          cursor: selecting ? "pointer" : undefined,
+        }}
+      >
+        {isVideo(item) ? (
+          <>
+            <video src={item.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+            <span
+              className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-6 w-6 items-center justify-center rounded-full"
+              style={{ backgroundColor: `${theme.primary}d9`, color: theme.text }}
+              aria-hidden="true"
+            >
+              <Icon name="video" size={13} />
+            </span>
+          </>
+        ) : (
+          <Image
+            src={item.url}
+            fill
+            sizes="(max-width: 640px) 45vw, 20vw"
+            placeholder="blur"
+            blurDataURL="/image.png"
+            className="object-cover"
+            alt={item.name ?? ""}
+          />
+        )}
+      </div>
+      {/* Select control: always shown once a selection exists, hover-revealed otherwise. */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label={selected ? `Deselect ${item.name}` : `Select ${item.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle(item);
+        }}
+        className={`absolute left-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full shadow-sm backdrop-blur-sm transition-opacity ${
+          selected || selecting
+            ? "opacity-100"
+            : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        }`}
+        style={{
+          backgroundColor: selected ? theme.accent : "rgba(0,0,0,0.45)",
+          color: selected ? theme.primary : "#fff",
+        }}
+      >
+        <Icon name="check" size={13} strokeWidth={3} className={selected ? "" : "opacity-60"} />
+      </button>
+      {/* Outside the clipped tile so the dropdown is never cut off. */}
+      <div
+        className={`absolute right-2 top-2 transition-opacity ${
+          menuOpen ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+        }`}
+      >
+        <Actions theme={theme} item={item} index={index} menu={menuOpen ? index : -1} setMenu={setMenu} variant="tile" />
+      </div>
+      <figcaption className="mt-1.5 min-w-0">
+        <p className="truncate text-[12px]" title={item.name}>
+          {caption}
+        </p>
+      </figcaption>
+    </figure>
+  );
+});

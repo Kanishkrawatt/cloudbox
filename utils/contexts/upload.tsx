@@ -100,8 +100,15 @@ export const UploadProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener("beforeunload", warn);
   }, [uploading, reading]);
 
+  // XHR fires progress far more often than the rounded percentage changes;
+  // returning the same array keeps React from re-rendering every consumer.
   const patch = (index: number, changes: Partial<QueueItem>) =>
-    setQueue((prev) => prev.map((item, i) => (i === index ? { ...item, ...changes } : item)));
+    setQueue((prev) => {
+      const item = prev[index];
+      if (!item) return prev;
+      const same = (Object.keys(changes) as (keyof QueueItem)[]).every((k) => item[k] === changes[k]);
+      return same ? prev : prev.map((it, i) => (i === index ? { ...it, ...changes } : it));
+    });
 
   const addFiles = useCallback((list: FileList | File[]) => {
     const incoming = Array.from(list);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import RecentImages from "@/components/frames/images";
 import Layout from "@/components/layouts/baseLayout";
 import db from "@/firebase/firestore";
@@ -61,9 +61,15 @@ function Image() {
     if (!user?.uid) return;
     getImageData(user?.uid);
   }, [getImageData, user?.uid]);
-  const visible = filterGroups(searchQuery, images)
-    .map((group) => ({ ...group, data: onlyMe.filter(group.data) }))
-    .filter((group) => group.data.length > 0);
+  const { filter: onlyMeFilter } = onlyMe;
+  const visible = useMemo(
+    () =>
+      filterGroups(searchQuery, images)
+        .map((group) => ({ ...group, data: onlyMeFilter(group.data) }))
+        .filter((group) => group.data.length > 0),
+    [searchQuery, images, onlyMeFilter]
+  );
+  const flat = useMemo(() => images.flatMap((g) => g.data), [images]);
 
   return (
     <Layout
@@ -74,7 +80,7 @@ function Image() {
     >
       {!searchQuery && !loading && user?.uid && (
         <SuggestedAlbums
-          data={images.flatMap((g) => g.data)}
+          data={flat}
           theme={theme}
           onCreated={() => getImageData(user.uid)}
         />

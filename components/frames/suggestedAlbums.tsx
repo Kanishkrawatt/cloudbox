@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import axios from "axios";
 import { addDoc, collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
@@ -27,7 +27,8 @@ const SuggestedAlbums = ({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const albums = suggestAlbums(data).filter((a) => !dismissed.includes(a.start));
+  const suggested = useMemo(() => suggestAlbums(data), [data]);
+  const albums = suggested.filter((a) => !dismissed.includes(a.start));
   if (albums.length === 0) return null;
 
   const create = async (album: Album<datatype>) => {
