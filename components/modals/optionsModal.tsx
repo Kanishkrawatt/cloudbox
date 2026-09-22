@@ -5,6 +5,7 @@ import Icon from "@/components/ui/icons";
 
 import { datatype } from "@/components/types";
 import { useAuth } from "@/utils/contexts/auth";
+import auth from "@/firebase/auth";
 
 type ModalProps = {
   modal: { status: string; item: any };
@@ -20,6 +21,19 @@ function OptionsModal({ modal, setModal, item }: ModalProps) {
       return <OpenItem modal={modal} setModal={setModal} item={item} />;
     case "share":
       return <ShareItem modal={modal} setModal={setModal} item={item} />;
+    case "rename":
+      return <RenameItem modal={modal} setModal={setModal} item={item} />;
+    case "move":
+      return (
+        <FolderPicker
+          title="Move to folder"
+          onClose={() => setModal({ status: "closed", item: {} })}
+          onPick={async (folderId) => {
+            await updateItems([item.url], { folderId });
+            window.location.reload();
+          }}
+        />
+      );
     default:
       return <></>;
   }
@@ -209,6 +223,137 @@ export const ShareItem = ({ setModal, item }: ModalProps) => {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
+    </Shell>
+  );
+};
+
+/** Rename/move helper shared by the context menu and the bulk bar. */
+export const updateItems = async (urls: string[], patch: { name?: string; folderId?: string }) => {
+  const idToken = await auth.currentUser?.getIdToken();
+  const res = await fetch("/api/updateItem", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken, urls, ...patch }),
+  });
+  if (!res.ok) throw new Error((await res.json())?.error ?? "Update failed.");
+};
+
+export const RenameItem = ({ setModal, item }: ModalProps) => {
+  const { theme } = useTheme();
+  const [name, setName] = useState<string>(item.name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const close = () => setModal({ status: "closed", item: {} });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || name.trim() === item.name) return close();
+    setBusy(true);
+    try {
+      await updateItems([item.url], { name: name.trim() });
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell onClose={close}>
+      <h3 className="page-title pr-6">Rename</h3>
+      <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
+        <input
+          autoFocus
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          className="field h-9 text-[13px]"
+          style={{ backgroundColor: theme.secondary, borderColor: theme.border }}
+          aria-label="File name"
+        />
+        {error && <p className="text-[13px]" style={{ color: "#e5484d" }}>{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn h-9 text-[13px]" onClick={close}>Cancel</button>
+          <button type="submit" disabled={busy} className="btn btn-primary h-9 text-[13px]">
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </Shell>
+  );
+};
+
+/** Lists the user's folders plus "Library" (root); `onPick("")` means root. */
+export const FolderPicker = ({
+  title,
+  onClose,
+  onPick,
+}: {
+  title: string;
+  onClose: () => void;
+  onPick: (folderId: string) => Promise<void>;
+}) => {
+  const { theme } = useTheme();
+  const { user } = useAuth();
+  const [folders, setFolders] = useState<{ id: string; name: string }[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    fetch("/api/getFolders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: user.uid }),
+    })
+      .then((r) => r.json())
+      .then((b) => setFolders(b.data ?? []))
+      .catch(() => setFolders([]));
+  }, [user?.uid]);
+
+  const pick = async (id: string) => {
+    setBusy(id);
+    try {
+      await onPick(id);
+    } catch (err: any) {
+      setError(err.message);
+      setBusy(null);
+    }
+  };
+
+  const Row = ({ id, name, icon }: { id: string; name: string; icon: "home" | "folder" }) => (
+    <button
+      type="button"
+      disabled={busy !== null}
+      onClick={() => pick(id)}
+      className="menu-item text-[13px]"
+    >
+      <Icon name={icon} size={15} />
+      <span className="truncate">{name}</span>
+      {busy === id && <span className="ml-auto text-[11px]" style={{ color: theme.muted }}>Moving…</span>}
+    </button>
+  );
+
+  return (
+    <Shell onClose={onClose}>
+      <h3 className="page-title pr-6">{title}</h3>
+      <div className="mt-3 max-h-72 overflow-y-auto">
+        {folders === null ? (
+          <div className="skeleton h-9 rounded-md" />
+        ) : (
+          <>
+            <Row id="" name="Library (no folder)" icon="home" />
+            {folders.map((f) => <Row key={f.id} id={f.id} name={f.name} icon="folder" />)}
+            {folders.length === 0 && (
+              <p className="px-2.5 py-2 text-[12px]" style={{ color: theme.muted }}>
+                No folders yet. Create one from Home.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+      {error && <p className="mt-2 text-[13px]" style={{ color: "#e5484d" }}>{error}</p>}
     </Shell>
   );
 };

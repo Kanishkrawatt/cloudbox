@@ -3,6 +3,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Actions } from "@/components/actions";
 import Icon from "@/components/ui/icons";
+import { useSelection } from "@/utils/contexts/selection";
 
 const isVideo = (item: datatype) =>
   item.type?.startsWith("video/") || /\.(mp4|mov|webm|mkv|m4v)$/i.test(item.name ?? item.url ?? "");
@@ -33,6 +34,8 @@ const RecentImages = ({
   caption?: "date" | "name";
 }) => {
   const [menu, setMenu] = useState<number>(-1);
+  const selection = useSelection();
+  const selecting = selection.items.length > 0;
 
   const header = title && (
     <div className="mb-3 flex items-baseline gap-2">
@@ -74,13 +77,19 @@ const RecentImages = ({
                 <div className="skeleton mt-2 h-3 w-2/3 rounded" />
               </div>
             ))
-          : data.map((item, index) => (
+          : data.map((item, index) => {
+              const selected = selection.has(item.url);
+              return (
               <figure key={`${item.url}-${index}`} className="group relative min-w-0">
                 <div
-                  className="relative aspect-square w-full overflow-hidden rounded-lg"
+                  className="relative aspect-square w-full overflow-hidden rounded-lg transition-[box-shadow,transform]"
+                  onClick={selecting ? () => selection.toggle(item) : undefined}
                   style={{
-                    border: `1px solid ${theme.border}`,
+                    border: `1px solid ${selected ? theme.accent : theme.border}`,
+                    boxShadow: selected ? `0 0 0 2px ${theme.accent}` : undefined,
+                    transform: selected ? "scale(0.96)" : undefined,
                     backgroundColor: theme.secondary,
+                    cursor: selecting ? "pointer" : undefined,
                   }}
                 >
                   {isVideo(item) ? (
@@ -112,6 +121,29 @@ const RecentImages = ({
                     />
                   )}
                 </div>
+                {/* Select checkbox: always shown once a selection exists, hover-revealed otherwise. */}
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={selected}
+                  aria-label={selected ? `Deselect ${item.name}` : `Select ${item.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selection.toggle(item);
+                  }}
+                  className={`absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-opacity ${
+                    selected || selecting
+                      ? "opacity-100"
+                      : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                  }`}
+                  style={{
+                    borderColor: selected ? theme.accent : "#fff",
+                    backgroundColor: selected ? theme.accent : "rgba(0,0,0,0.35)",
+                    color: theme.primary,
+                  }}
+                >
+                  {selected && <Icon name="check" size={13} strokeWidth={3} />}
+                </button>
                 {/* Outside the clipped tile so the dropdown is never cut off;
                     always visible on touch screens, hover-revealed with a mouse. */}
                 <div
@@ -139,7 +171,8 @@ const RecentImages = ({
                   </p>
                 </figcaption>
               </figure>
-            ))}
+              );
+            })}
       </div>
     </section>
   );

@@ -1,23 +1,31 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react'
 import Icon, { IconName } from '@/components/ui/icons';
 import { datatype, themeType } from '../types'
-import { options } from '../../utils/constant/index';
+import { useRouter } from 'next/router';
 import OptionsModal from '../modals/optionsModal';
+import { shareThese } from '@/utils/shareHandoff';
 
 export type ModalState = Dispatch<SetStateAction<ModalObject>>
-export type ActionState = "open" | "delete" | "share" | "download";
+export type ActionState =
+    | "open" | "openTab" | "rename" | "move" | "share" | "smartshare" | "download" | "delete";
+
+/** Menu entries in display order; a divider is drawn before "delete". */
+const OPTIONS: { name: ActionState; label: string; icon: IconName }[] = [
+    { name: "open", label: "Preview", icon: "eye" },
+    { name: "openTab", label: "Open in new tab", icon: "external" },
+    { name: "download", label: "Download", icon: "download" },
+    { name: "share", label: "Copy link", icon: "link" },
+    { name: "smartshare", label: "Smart Share…", icon: "share" },
+    { name: "rename", label: "Rename", icon: "edit" },
+    { name: "move", label: "Move to folder", icon: "folder" },
+    { name: "delete", label: "Delete", icon: "trash" },
+];
 export type ModalObject = {
     status: string;
     item: {
         name: string;
         url: string;
     };
-}
-export enum Action {
-    open = "open",
-    delete = "delete",
-    share = "share",
-    download = "download"
 }
 
 export const Actions = ({ theme, item, index,menu,setMenu }: {
@@ -27,27 +35,25 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
     menu : number
     setMenu : Dispatch<SetStateAction<number>>
 }) => {
+    const router = useRouter();
     const [modal, setModal] = useState<ModalObject>({ status: "", item: { name: "", url: "" } })
     const handleClick = (index: number) => {
         if (index !== menu) setMenu(index);
         else setMenu(-1);
     };
-    const handleAction = (Actions: ActionState, item: datatype) => {
-        switch (Actions) {
-            case Action.open:
-                setModal({ status: Action.open, item: item });
-                break;
-            case Action.delete:
-                setModal({ status: Action.delete, item: item });
-                break;
-            case Action.share:
-                setModal({ status: Action.share, item: item });
-                break;
-            case Action.download:
-                handleDownload(item);
-                break
+    const handleAction = (action: ActionState, item: datatype) => {
+        switch (action) {
+            case "download":
+                return handleDownload(item);
+            case "openTab":
+                return window.open(item.url, "_blank", "noopener");
+            case "smartshare":
+                return shareThese(router, {
+                    name: item.name ?? "Shared file",
+                    files: [{ url: item.url, name: item.name, type: item.type }],
+                });
             default:
-                break;
+                setModal({ status: action, item });
         }
     }
     const handleDownload = async (item: datatype) => {
@@ -83,12 +89,6 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
             document.removeEventListener("keydown", onKey);
         };
     }, [open, setMenu]);
-    const ICONS: Record<string, IconName> = {
-        open: "eye",
-        share: "link",
-        delete: "trash",
-        download: "download",
-    };
     return (
         <div ref={menuRef} className="relative">
             <button
@@ -105,21 +105,26 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
                 <Icon name={open ? "close" : "more"} size={16} strokeWidth={2} />
             </button>
             {open && (
-                <div role="menu" className="menu absolute right-0 top-8 z-40 w-40 p-1.5">
-                    {options.map((Optionitem, key) => (
-                        <button
-                            key={key}
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                                handleAction(Optionitem.name as ActionState, item);
-                                setMenu(-1);
-                            }}
-                            className="menu-item text-[13px] capitalize"
-                        >
-                            <Icon name={ICONS[Optionitem.name] ?? "file"} size={15} />
-                            {Optionitem.name}
-                        </button>
+                <div role="menu" className="menu absolute right-0 top-8 z-40 w-48 p-1.5">
+                    {OPTIONS.map((option) => (
+                        <React.Fragment key={option.name}>
+                            {option.name === "delete" && (
+                                <div className="my-1 border-t" style={{ borderColor: theme.border }} />
+                            )}
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                    handleAction(option.name, item);
+                                    setMenu(-1);
+                                }}
+                                className="menu-item text-[13px]"
+                                style={option.name === "delete" ? { color: "#e5484d" } : undefined}
+                            >
+                                <Icon name={option.icon} size={15} />
+                                {option.label}
+                            </button>
+                        </React.Fragment>
                     ))}
                 </div>
             )}
