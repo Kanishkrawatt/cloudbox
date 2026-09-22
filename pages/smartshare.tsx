@@ -345,18 +345,35 @@ function Smartshare() {
               onThreshold={setFaceThreshold}
             />
 
-            <Toggle
-              checked={allowUploads}
-              onChange={() => setAllowUploads((v) => !v)}
-              label="Let recipients add files"
-              hint="Anyone with the link can drop their own photos into this share."
-            />
-            <Toggle
-              checked={burnAfterDownload}
-              onChange={() => setBurnAfterDownload((v) => !v)}
-              label="Expire after the first download"
-              hint="One-shot link: it stops working as soon as something is downloaded."
-            />
+            {/* Rarely used; kept out of the first fold. */}
+            <details className="group rounded-lg" style={{ border: `1px solid ${theme.border}` }}>
+              <summary
+                className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-[13px]"
+                style={{ color: theme.muted }}
+              >
+                <Icon name="chevronDown" size={14} className="transition-transform group-open:rotate-180" />
+                More options
+                {(allowUploads || burnAfterDownload) && (
+                  <span className="ml-auto text-[11px]" style={{ color: theme.accent }}>
+                    {[allowUploads && "guests can add", burnAfterDownload && "one-shot"].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </summary>
+              <div className="flex flex-col gap-2 px-3 pb-3">
+                <Toggle
+                  checked={allowUploads}
+                  onChange={() => setAllowUploads((v) => !v)}
+                  label="Let recipients add files"
+                  hint="Anyone with the link can drop their own photos into this share."
+                />
+                <Toggle
+                  checked={burnAfterDownload}
+                  onChange={() => setBurnAfterDownload((v) => !v)}
+                  label="Expire after the first download"
+                  hint="One-shot link: it stops working as soon as something is downloaded."
+                />
+              </div>
+            </details>
 
             <div className="flex items-center gap-2">
               <div className="relative">

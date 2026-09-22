@@ -10,6 +10,18 @@ import { faceCrop } from "@/utils/faceApi";
 import type { SharePayload } from "./api/smartshare/[id]";
 import { uploadSigned } from "@/utils/cloudinary";
 
+/**
+ * Rough wall-clock for face sorting: the free Render instance takes ~45 s to
+ * wake and 1–3 s per photo. Shown to recipients so the banner is a promise,
+ * not a mystery.
+ */
+export const sortingEstimate = (photos: number) => {
+  const seconds = 45 + photos * 3;
+  if (seconds < 90) return "about a minute";
+  const minutes = Math.ceil(seconds / 60);
+  return `about ${minutes} minutes`;
+};
+
 const prettySize = (bytes: number) =>
   bytes <= 0
     ? ""
@@ -250,11 +262,11 @@ function SmartShow() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">
-                    Sorting these photos by face
+                    Sorting {share.files.filter((f) => f.type?.startsWith("image/")).length} photos by face
                   </p>
                   <p className="text-[12px]" style={{ color: theme.muted }}>
-                    People will appear here in a minute. The photos below are all
-                    ready to view now.
+                    Usually takes {sortingEstimate(share.files.filter((f) => f.type?.startsWith("image/")).length)}.
+                    People will appear here on their own; the photos below are ready now.
                   </p>
                 </div>
                 <span
