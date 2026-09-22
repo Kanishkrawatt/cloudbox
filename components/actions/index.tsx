@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useState } from 'react'
+import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react'
 import Icon, { IconName } from '@/components/ui/icons';
 import { datatype, themeType } from '../types'
 import { options } from '../../utils/constant/index';
@@ -64,6 +64,25 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
             });
     }
     const open = index !== -1 && menu === index;
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Close on click outside or Escape; the tile's hover-only visibility used
+    // to leave a menu open with no way to dismiss it on touch screens.
+    useEffect(() => {
+        if (!open) return;
+        const onDown = (e: MouseEvent | TouchEvent) => {
+            if (!menuRef.current?.contains(e.target as Node)) setMenu(-1);
+        };
+        const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(-1);
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("touchstart", onDown);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", onDown);
+            document.removeEventListener("touchstart", onDown);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [open, setMenu]);
     const ICONS: Record<string, IconName> = {
         open: "eye",
         share: "link",
@@ -71,7 +90,7 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
         download: "download",
     };
     return (
-        <React.Fragment>
+        <div ref={menuRef} className="relative">
             <button
                 type="button"
                 aria-label={open ? "Close actions" : "File actions"}
@@ -86,7 +105,7 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
                 <Icon name={open ? "close" : "more"} size={16} strokeWidth={2} />
             </button>
             {open && (
-                <div role="menu" className="menu absolute right-0 top-8 z-30 w-40 p-1.5">
+                <div role="menu" className="menu absolute right-0 top-8 z-40 w-40 p-1.5">
                     {options.map((Optionitem, key) => (
                         <button
                             key={key}
@@ -105,6 +124,6 @@ export const Actions = ({ theme, item, index,menu,setMenu }: {
                 </div>
             )}
             <OptionsModal modal={modal} setModal={setModal} item={item} />
-        </React.Fragment>
+        </div>
     )
 }

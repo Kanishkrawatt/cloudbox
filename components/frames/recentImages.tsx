@@ -4,6 +4,9 @@ import { useState } from "react";
 import { Actions } from "@/components/actions";
 import Icon from "@/components/ui/icons";
 
+const isVideo = (item: datatype) =>
+  item.type?.startsWith("video/") || /\.(mp4|mov|webm|mkv|m4v)$/i.test(item.name ?? item.url ?? "");
+
 const COLUMNS = {
   small: "grid-cols-3 sm:grid-cols-5 lg:grid-cols-8",
   medium: "grid-cols-2 sm:grid-cols-4 lg:grid-cols-6",
@@ -72,7 +75,7 @@ const RecentImages = ({
               </div>
             ))
           : data.map((item, index) => (
-              <figure key={`${item.url}-${index}`} className="group min-w-0">
+              <figure key={`${item.url}-${index}`} className="group relative min-w-0">
                 <div
                   className="relative aspect-square w-full overflow-hidden rounded-lg"
                   style={{
@@ -80,32 +83,55 @@ const RecentImages = ({
                     backgroundColor: theme.secondary,
                   }}
                 >
-                  <Image
-                    src={item.url}
-                    fill
-                    sizes="(max-width: 640px) 45vw, 20vw"
-                    placeholder="blur"
-                    blurDataURL="/image.png"
-                    className="object-cover"
-                    alt={item.name ?? ""}
-                  />
-                  <div className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                    <div
-                      className="relative rounded-md"
-                      style={{
-                        backgroundColor: theme.primary,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      <Actions
-                        theme={theme}
-                        item={item}
-                        index={index}
-                        menu={menu}
-                        setMenu={setMenu}
+                  {isVideo(item) ? (
+                    <>
+                      <video
+                        src={item.url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
                       />
-                    </div>
-                  </div>
+                      <span
+                        className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-6 w-6 items-center justify-center rounded-full"
+                        style={{ backgroundColor: `${theme.primary}d9`, color: theme.text }}
+                        aria-hidden="true"
+                      >
+                        <Icon name="video" size={13} />
+                      </span>
+                    </>
+                  ) : (
+                    <Image
+                      src={item.url}
+                      fill
+                      sizes="(max-width: 640px) 45vw, 20vw"
+                      placeholder="blur"
+                      blurDataURL="/image.png"
+                      className="object-cover"
+                      alt={item.name ?? ""}
+                    />
+                  )}
+                </div>
+                {/* Outside the clipped tile so the dropdown is never cut off;
+                    always visible on touch screens, hover-revealed with a mouse. */}
+                <div
+                  className={`absolute right-1 top-1 rounded-md transition-opacity ${
+                    menu === index
+                      ? "opacity-100"
+                      : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                  }`}
+                  style={{
+                    backgroundColor: theme.primary,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  <Actions
+                    theme={theme}
+                    item={item}
+                    index={index}
+                    menu={menu}
+                    setMenu={setMenu}
+                  />
                 </div>
                 <figcaption className="mt-1.5 min-w-0">
                   <p className="truncate text-[12px]" title={item.name}>

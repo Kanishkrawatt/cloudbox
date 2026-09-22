@@ -81,10 +81,7 @@ const FileFrame = ({
   return (
     <section className="px-4 py-5 sm:px-6">
       {header}
-      <div
-        className="overflow-hidden rounded-xl"
-        style={{ border: `1px solid ${theme.border}` }}
-      >
+      <div className="rounded-xl" style={{ border: `1px solid ${theme.border}` }}>
         {loadingState
           ? [1, 2, 3].map((item, index) => (
               <div
@@ -100,7 +97,9 @@ const FileFrame = ({
           : data.map((item, index) => (
               <div
                 key={`${item.url}-${index}`}
-                className="group relative flex items-center gap-3 px-3 py-2.5 transition-colors"
+                className={`group relative flex items-center gap-3 px-3 py-2.5 transition-colors ${
+                  index === 0 ? "rounded-t-xl" : ""
+                } ${index === data.length - 1 ? "rounded-b-xl" : ""}`}
                 style={{ borderTop: index ? `1px solid ${theme.border}` : undefined }}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.secondary)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}

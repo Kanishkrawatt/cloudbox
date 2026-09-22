@@ -129,12 +129,51 @@ export const DeleteItem = ({ setModal, item }: ModalProps) => {
   );
 };
 
+const kindOf = (item: datatype) => {
+  const name = (item.name ?? item.url ?? "").toLowerCase();
+  if (item.type?.startsWith("video/") || /\.(mp4|mov|webm|mkv|m4v)$/.test(name)) return "video";
+  if (item.type?.startsWith("audio/") || /\.(mp3|wav|aac|m4a|ogg)$/.test(name)) return "audio";
+  if (item.type?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(name)) return "image";
+  if (item.type === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  return "other";
+};
+
 export const OpenItem = ({ setModal, item }: ModalProps) => {
+  const { theme } = useTheme();
   const close = () => setModal({ status: "closed", item: {} });
+  const kind = kindOf(item);
   return (
     <Shell onClose={close} wide>
+      <p className="mb-3 truncate pr-8 text-[13px]" title={item.name}>
+        {item.name}
+      </p>
       <div className="relative h-[70vh] w-full">
-        <Image src={item.url} fill alt={item.name ?? ""} className="object-contain" sizes="90vw" />
+        {kind === "image" && (
+          <Image src={item.url} fill alt={item.name ?? ""} className="object-contain" sizes="90vw" />
+        )}
+        {kind === "video" && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={item.url} controls autoPlay playsInline className="h-full w-full rounded-lg bg-black object-contain" />
+        )}
+        {kind === "audio" && (
+          <div className="flex h-full items-center justify-center">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio src={item.url} controls autoPlay className="w-full max-w-md" />
+          </div>
+        )}
+        {kind === "pdf" && (
+          <iframe src={item.url} title={item.name} className="h-full w-full rounded-lg" />
+        )}
+        {kind === "other" && (
+          <div className="flex h-full flex-col items-center justify-center gap-3" style={{ color: theme.muted }}>
+            <Icon name="file" size={28} />
+            <p className="text-[13px]">No preview for this file type.</p>
+            <a href={item.url} target="_blank" rel="noreferrer" className="btn h-9 text-[13px]">
+              <Icon name="external" size={14} />
+              Open in new tab
+            </a>
+          </div>
+        )}
       </div>
     </Shell>
   );
