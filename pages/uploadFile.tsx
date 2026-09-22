@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import axios from "axios";
 import { collection, doc, updateDoc, addDoc, increment } from "firebase/firestore";
 import Layout from "@/components/layouts/baseLayout";
@@ -226,6 +227,16 @@ export function UploadFile() {
   };
 
   const done = queue.length > 0 && queue.every((item) => item.status === "success");
+  const doneCount = queue.filter((item) => item.status === "success").length;
+  const imageCount = queue.filter((item) => item.status === "success" && item.file.type.startsWith("image/")).length;
+
+  const clear = () => {
+    queue.forEach((item) => URL.revokeObjectURL(item.url));
+    setQueue([]);
+    setNames([]);
+    setProgress([]);
+    setError(null);
+  };
 
   return (
     <Layout title="Upload">
@@ -338,6 +349,41 @@ export function UploadFile() {
             Reading text from {reading} image{reading === 1 ? "" : "s"} in the background so you can search
             by what&apos;s in them. Keep this tab open until it finishes.
           </p>
+        )}
+
+        {done && !uploading && (
+          <div
+            className="mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3"
+            role="status"
+            style={{ backgroundColor: theme.secondary, border: `1px solid ${theme.accent}` }}
+          >
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: theme.accent, color: theme.primary }}
+            >
+              <Icon name="check" size={15} strokeWidth={2.4} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium">
+                {doneCount} file{doneCount === 1 ? "" : "s"} uploaded
+                {folderName ? ` to ${folderName}` : ""}
+              </p>
+              <p className="text-[12px]" style={{ color: theme.muted }}>
+                {reading > 0
+                  ? `Still reading text from ${reading} image${reading === 1 ? "" : "s"} for search.`
+                  : "Ready to view."}
+              </p>
+            </div>
+            <Link
+              href={folderName ? `/folder?name=${encodeURIComponent(folderName)}` : imageCount > 0 ? "/images" : "/files"}
+              className="btn h-8 text-[12px]"
+            >
+              View
+            </Link>
+            <button type="button" onClick={clear} className="btn btn-primary h-8 text-[12px]">
+              Upload more
+            </button>
+          </div>
         )}
 
         {error && (
