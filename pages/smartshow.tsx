@@ -8,6 +8,7 @@ import Icon from "@/components/ui/icons";
 import Logo from "@/components/ui/logo";
 import { faceCrop } from "@/utils/faceApi";
 import type { SharePayload } from "./api/smartshare/[id]";
+import { uploadSigned } from "@/utils/cloudinary";
 
 const prettySize = (bytes: number) =>
   bytes <= 0
@@ -29,10 +30,14 @@ function SmartShow() {
   const [person, setPerson] = useState<number>(-1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [asked, setAsked] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const addRef = React.useRef<HTMLInputElement>(null);
 
+  // `peek` keeps background reloads out of the open count.
   const load = useCallback(async (shareId: string, quiet = false) => {
     if (!quiet) setLoading(true);
-    const res = await fetch(`/api/smartshare/${shareId}`);
+    const res = await fetch(`/api/smartshare/${shareId}${quiet ? "?peek=1" : ""}`);
     const body = await res.json();
     if (!res.ok) {
       setError(body?.error ?? "This link is not available.");
@@ -62,6 +67,13 @@ function SmartShow() {
     return () => clearInterval(timer);
   }, [share?.faceStatus, id, load]);
 
+  const track = (event: "download" | "extend", file?: string) =>
+    fetch("/api/smartshare/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, event, file }),
+    }).then((r) => r.json().catch(() => ({})));
+
   const download = async (url: string, name: string) => {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -73,6 +85,51 @@ function SmartShow() {
     link.click();
     link.remove();
     URL.revokeObjectURL(href);
+    const result = await track("download", name);
+    if (result?.burned) {
+      setShare(null);
+      setError("That was a one-time link. It has now been used.");
+    }
+  };
+
+  const askForTime = async () => {
+    await track("extend");
+    setAsked(true);
+  };
+
+  const addFiles = async (picked: File[]) => {
+    if (!picked.length || !id) return;
+    try {
+      for (const file of picked) {
+        setAdding(file.name);
+        const sign = await fetch("/api/smartshare/guest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, step: "sign", fileName: file.name.replace(/\.[^.]+$/, "") }),
+        }).then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json()).error))));
+        const upload = await uploadSigned(file, sign);
+        const rec = await fetch("/api/smartshare/guest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id,
+            step: "record",
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: upload.url,
+            publicId: upload.publicId,
+            resourceType: upload.resourceType,
+          }),
+        });
+        if (!rec.ok) throw new Error((await rec.json()).error ?? "Could not add that file.");
+      }
+      await load(String(id), true);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not add that file.");
+    } finally {
+      setAdding(null);
+    }
   };
 
   // A photo can belong to several people, so filtering is a membership test.
@@ -128,8 +185,52 @@ function SmartShow() {
               <p className="mt-1 text-[13px]" style={{ color: theme.muted }}>
                 {share.files.length} file{share.files.length === 1 ? "" : "s"}
                 {share.expiresOn ? ` · available until ${share.expiresOn}` : ""}
+                {share.burnAfterDownload ? " · expires after the first download" : ""}
               </p>
+              {share.expiresOn && (
+                <button
+                  type="button"
+                  onClick={askForTime}
+                  disabled={asked || share.extendRequested}
+                  className="mt-2 text-[12px] underline-offset-2 hover:underline disabled:no-underline"
+                  style={{ color: asked || share.extendRequested ? theme.muted : theme.accent }}
+                >
+                  {asked || share.extendRequested ? "The owner has been asked for more time" : "Need more time? Ask the owner"}
+                </button>
+              )}
             </div>
+
+            {share.allowUploads && (
+              <div
+                className="mb-6 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3"
+                style={{ border: `1px dashed ${theme.border}` }}
+              >
+                <Icon name="upload" size={16} />
+                <p className="min-w-0 flex-1 text-[13px]">
+                  <span className="font-medium">Got photos from the same day?</span>{" "}
+                  <span style={{ color: theme.muted }}>Add them here for everyone.</span>
+                </p>
+                <input
+                  ref={addRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    addFiles(picked);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={adding !== null}
+                  onClick={() => addRef.current?.click()}
+                  className="btn h-8 text-[12px]"
+                >
+                  {adding ? `Adding ${adding}…` : "Add files"}
+                </button>
+              </div>
+            )}
 
             {share.faceStatus === "running" && (
               <div
@@ -271,6 +372,9 @@ function SmartShow() {
                     <figcaption className="mt-1.5 flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-[12px]" title={file.name}>
                         {file.name}
+                        {file.guest && (
+                          <span className="ml-1" style={{ color: theme.muted }}>· guest</span>
+                        )}
                       </span>
                       <span className="shrink-0 text-[11px]" style={{ color: theme.muted }}>
                         {prettySize(file.size)}

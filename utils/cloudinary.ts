@@ -20,7 +20,7 @@ export const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? "";
 
 export const cloudinaryConfigured = () => CLOUD_NAME.length > 0;
 
-type SignResponse = {
+export type SignResponse = {
   signature: string;
   timestamp: number;
   apiKey: string;
@@ -53,7 +53,15 @@ export async function uploadToCloudinary({
     throw new Error(body.error ?? "Could not authorise the upload.");
   }
   const sign: SignResponse = await signRes.json();
+  return uploadSigned(file, sign, onProgress);
+}
 
+/** Sends the bytes to Cloudinary with a signature obtained elsewhere. */
+export function uploadSigned(
+  file: File,
+  sign: SignResponse,
+  onProgress?: (percent: number) => void
+): Promise<CloudinaryUpload> {
   const form = new FormData();
   form.append("file", file);
   form.append("api_key", sign.apiKey);

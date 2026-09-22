@@ -1,6 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  increment,
+  type DocumentData,
+  type DocumentReference,
+} from "firebase/firestore";
 import db from "../../../firebase/firestore";
+import { fireWebhook } from "@/utils/webhook";
 
 export type SharePayload = {
   name: string;
@@ -16,16 +26,24 @@ export type SharePayload = {
     face?: { url: string; box: { x: number; y: number; width: number; height: number } };
   }[];
   noFaces: string[];
+  /** Recipients may add their own files to this share. */
+  allowUploads: boolean;
+  /** The link stops working after the first download. */
+  burnAfterDownload: boolean;
+  /** A recipient has asked the owner for more time. */
+  extendRequested: boolean;
   files: {
     name: string;
     size: number;
     type: string;
     url: string;
+    /** Set when a recipient, not the owner, added the file. */
+    guest?: boolean;
   }[];
 };
 
 /** Share ids look like "<shareId>-<uid>"; a uid may itself contain dashes. */
-const splitShareId = (raw: string) => {
+export const splitShareId = (raw: string) => {
   const at = raw.indexOf("-");
   if (at < 1) return null;
   return { shareId: raw.slice(0, at), uid: raw.slice(at + 1) };
@@ -38,32 +56,53 @@ export const expiryOf = (date?: string, days?: number) => {
   return new Date(created.getTime() + days * 24 * 60 * 60 * 1000);
 };
 
+/**
+ * Loads a share and tells the caller why it is unavailable, if it is. Shared
+ * by every recipient-facing route so expiry and burn are enforced once.
+ */
+type LoadedShare =
+  | { error: string; status: number }
+  | {
+      uid: string;
+      shareId: string;
+      ref: DocumentReference<DocumentData>;
+      share: DocumentData;
+      expiresOn: Date | null;
+    };
+
+export const loadShare = async (raw: string): Promise<LoadedShare> => {
+  const parts = splitShareId(raw);
+  if (!parts) return { error: "Malformed share link.", status: 400 };
+  const ref = doc(db, `User/${parts.uid}/Smartshare/${parts.shareId}`);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return { error: "This share link no longer exists.", status: 404 };
+  const share = snap.data();
+  const expiresOn = expiryOf(share.date, share.time);
+  if (expiresOn && expiresOn.getTime() < Date.now()) {
+    return { error: "This share link has expired.", status: 410 };
+  }
+  if (share.burnedAt) {
+    return { error: "This link was for a single download and has been used.", status: 410 };
+  }
+  return { ...parts, ref, share, expiresOn };
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SharePayload | { error: string }>
 ) {
-  const parts = splitShareId(String(req.query.id ?? ""));
-  if (!parts) return res.status(400).json({ error: "Malformed share link." });
-
   try {
-    const shareSnap = await getDoc(
-      doc(db, `User/${parts.uid}/Smartshare/${parts.shareId}`)
-    );
-    if (!shareSnap.exists()) {
-      return res.status(404).json({ error: "This share link no longer exists." });
-    }
-    const share = shareSnap.data();
-    const expiresOn = expiryOf(share.date, share.time);
+    const loaded = await loadShare(String(req.query.id ?? ""));
+    if ("error" in loaded) return res.status(loaded.status).json({ error: loaded.error });
+    const { uid, shareId, ref, share, expiresOn } = loaded;
 
-    // Enforced on read: the cleanup job runs on its own schedule, and an
-    // expired link must stop working the moment it expires either way.
-    if (expiresOn && expiresOn.getTime() < Date.now()) {
-      return res.status(410).json({ error: "This share link has expired." });
+    // `peek` is for background polling (face status); only a real open counts.
+    if (!req.query.peek) {
+      updateDoc(ref, { "stats.opens": increment(1) }).catch(() => undefined);
+      fireWebhook(uid, "share.opened", { shareId, name: share.name ?? null });
     }
 
-    const filesSnap = await getDocs(
-      collection(db, `User/${parts.uid}/Smartshare/${parts.shareId}/files`)
-    );
+    const filesSnap = await getDocs(collection(db, `User/${uid}/Smartshare/${shareId}/files`));
 
     return res.status(200).json({
       name: share.name ?? "Shared files",
@@ -73,6 +112,9 @@ export default async function handler(
       faceStatus: share.faceStatus ?? (share.faceGroups ? "done" : null),
       people: share.faceGroups?.people ?? [],
       noFaces: share.faceGroups?.noFaces ?? [],
+      allowUploads: Boolean(share.allowUploads),
+      burnAfterDownload: Boolean(share.burnAfterDownload),
+      extendRequested: Boolean(share.extendRequested),
       files: filesSnap.docs.map((d) => {
         const data = d.data();
         return {
@@ -80,6 +122,7 @@ export default async function handler(
           size: data.size ?? 0,
           type: data.type ?? "",
           url: data.url,
+          ...(data.guest ? { guest: true } : {}),
         };
       }),
     });

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import db from "../../firebase/firestore";
 import { destroyAsset } from "@/utils/cloudinaryServer";
+import { fireWebhook } from "@/utils/webhook";
 
 /**
  * Cleanup job for expired Smart Share links. Meant to be called on a schedule
@@ -24,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const shares = await getDocs(collection(db, `User/${uid}/Smartshare`));
 
     for (const share of shares.docs) {
-      const { date, time } = share.data();
+      const { date, time, name } = share.data();
       if (!date || !time) continue;
 
       const created = new Date(date);
@@ -41,6 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await deleteDoc(file.ref);
       }
       await deleteDoc(doc(db, `User/${uid}/Smartshare/${share.id}`));
+      await fireWebhook(uid, "share.expired", { shareId: share.id, name: name ?? null });
       removed += 1;
     }
   }

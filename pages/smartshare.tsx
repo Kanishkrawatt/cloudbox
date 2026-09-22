@@ -30,6 +30,38 @@ type ShareLink = {
   date: string;
   expiresOn: string | null;
   expired: boolean;
+  stats: { opens: number; downloads: number };
+  allowUploads: boolean;
+  burnAfterDownload: boolean;
+  burnedAt: string | null;
+  extendRequested: boolean;
+};
+
+/** Files handed over from another page (Memories, People) via sessionStorage. */
+export const PREFILL_KEY = "cloudbox:share-prefill";
+export type Prefill = { name: string; files: { url: string; name: string; type: string }[] };
+
+const Toggle = ({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  hint: string;
+}) => {
+  const { theme } = useTheme();
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5" style={{ border: `1px solid ${theme.border}` }}>
+      <input type="checkbox" checked={checked} onChange={onChange} className="mt-0.5 accent-current" style={{ color: theme.accent }} />
+      <span className="min-w-0">
+        <span className="block text-[13px]">{label}</span>
+        <span className="block text-[12px]" style={{ color: theme.muted }}>{hint}</span>
+      </span>
+    </label>
+  );
 };
 
 function Smartshare() {
@@ -55,6 +87,36 @@ function Smartshare() {
   const [sortByFace, setSortByFace] = useState(false);
   const faceSort = useFaceSort();
   const [faceThreshold, setFaceThreshold] = useState(THRESHOLDS[1].value);
+  const [allowUploads, setAllowUploads] = useState(false);
+  const [burnAfterDownload, setBurnAfterDownload] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
+
+  // Another page can hand us a set of existing files to share; pull them back
+  // down as blobs so the normal upload path applies unchanged.
+  useEffect(() => {
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(PREFILL_KEY);
+      sessionStorage.removeItem(PREFILL_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    const prefill: Prefill = JSON.parse(raw);
+    setPrefilling(true);
+    Promise.all(
+      prefill.files.map(async (f) => {
+        const blob = await fetch(f.url).then((r) => r.blob());
+        return new File([blob], f.name, { type: f.type || blob.type });
+      })
+    )
+      .then((picked) => {
+        setFiles((prev) => [...prev, ...picked]);
+        if (nameRef.current && !nameRef.current.value) nameRef.current.value = prefill.name;
+      })
+      .catch(() => setError("Could not load those files. Add them by hand."))
+      .finally(() => setPrefilling(false));
+  }, []);
 
   // Read on the client only: the host is not known while rendering on the server.
   useEffect(() => setOrigin(window.location.origin), []);
@@ -116,6 +178,9 @@ function Smartshare() {
         sortByFace,
         // Recipients see a banner while this is not "done".
         faceStatus: sortByFace ? "running" : null,
+        allowUploads,
+        burnAfterDownload,
+        stats: { opens: 0, downloads: 0 },
       });
 
       for (let i = 0; i < files.length; i++) {
@@ -151,6 +216,16 @@ function Smartshare() {
       setBusy(false);
       setProgress(0);
     }
+  };
+
+  const updateShare = async (shareId: string, patch: Record<string, number | boolean>) => {
+    const idToken = await user?.getIdToken();
+    await fetch("/api/smartshare/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, shareId, ...patch }),
+    });
+    await loadLinks();
   };
 
   const removeShare = async (shareId: string) => {
@@ -270,6 +345,19 @@ function Smartshare() {
               onThreshold={setFaceThreshold}
             />
 
+            <Toggle
+              checked={allowUploads}
+              onChange={() => setAllowUploads((v) => !v)}
+              label="Let recipients add files"
+              hint="Anyone with the link can drop their own photos into this share."
+            />
+            <Toggle
+              checked={burnAfterDownload}
+              onChange={() => setBurnAfterDownload((v) => !v)}
+              label="Expire after the first download"
+              hint="One-shot link: it stops working as soon as something is downloaded."
+            />
+
             <div className="flex items-center gap-2">
               <div className="relative">
                 <button
@@ -305,7 +393,7 @@ function Smartshare() {
                 disabled={busy}
                 className="btn btn-primary ml-auto h-9 text-[13px]"
               >
-                {busy ? `Uploading ${progress}%` : "Create link"}
+                {busy ? `Uploading ${progress}%` : prefilling ? "Loading files…" : "Create link"}
               </button>
             </div>
 
@@ -379,11 +467,37 @@ function Smartshare() {
                           expired
                         </span>
                       )}
+                      {item.burnedAt && !item.expired && (
+                        <span className="ml-2 text-[11px]" style={{ color: theme.muted }}>
+                          used
+                        </span>
+                      )}
                     </p>
                     <p className="truncate text-[12px]" style={{ color: theme.muted }}>
                       {item.expiresOn ? `Expires ${item.expiresOn}` : "No expiry set"}
+                      {" · "}
+                      {item.stats.opens} open{item.stats.opens === 1 ? "" : "s"}, {item.stats.downloads} download
+                      {item.stats.downloads === 1 ? "" : "s"}
+                      {item.allowUploads && " · guests can add"}
+                      {item.burnAfterDownload && " · one-shot"}
                     </p>
+                    {item.extendRequested && !item.expired && (
+                      <p className="mt-1 text-[12px]" style={{ color: theme.accent }}>
+                        Someone asked for more time.
+                      </p>
+                    )}
                   </div>
+                  {!item.burnedAt && (
+                    <button
+                      type="button"
+                      className="btn h-7 shrink-0 px-2 text-[12px]"
+                      title="Add two days"
+                      onClick={() => updateShare(item.id, { extendDays: 2 })}
+                      style={item.extendRequested ? { borderColor: theme.accent, color: theme.accent } : undefined}
+                    >
+                      +2d
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn h-7 shrink-0 px-2 text-[12px]"
