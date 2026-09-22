@@ -15,6 +15,7 @@ export const MENUS: MenuItem[] = [
   { title: "Files", icon: "file", link: "/files", group: 0 },
   { title: "Upload", icon: "upload", link: "/uploadFile", group: 1 },
   { title: "Smart Share", icon: "share", link: "/smartshare", group: 1 },
+  { title: "People", icon: "users", link: "/people", group: 1 },
   { title: "Storage", icon: "chart", link: "/storage", group: 2 },
   { title: "API", icon: "code", link: "/cloudBoxApi", group: 2 },
 ];

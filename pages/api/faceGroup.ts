@@ -21,7 +21,7 @@ const JOB_THRESHOLD = 4;
 // The face service is slow enough that the default 10s would cut it off.
 export const config = { maxDuration: 60 };
 
-type Stored = {
+export type Stored = {
   people: {
     photos: string[];
     faceCount: number;
@@ -44,7 +44,7 @@ const toOriginal = (url: string, originals: string[]) => {
   return originals.find((original) => tail && original.endsWith(tail.replace(/^w_\d+\//, ""))) ?? url;
 };
 
-const toStored = (
+export const toStored = (
   result: FaceGroupResult,
   originals: string[],
   threshold?: number

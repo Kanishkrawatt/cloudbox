@@ -16,7 +16,8 @@ export type WebhookEvent =
   | "share.downloaded"
   | "share.extend_requested"
   | "share.guest_upload"
-  | "share.expired";
+  | "share.expired"
+  | "webhook.test";
 
 export type WebhookConfig = { url: string; secret?: string };
 
